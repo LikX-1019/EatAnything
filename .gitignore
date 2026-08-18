@@ -1,6 +1,10 @@
 .env
 .env.*
 !.env.example
+!frontend/.env.development
+!frontend/.env.test
+!frontend/.env.production
+!frontend/.env.example
 
 # Python
 backend/seed_assets/

@@ -1,6 +1,6 @@
 # 今天吃什么
 
-基于 uni-app、Vue 3、Vite 和 Pinia 的微信小程序前端演示。项目不使用后端、云函数、云数据库或本地持久化。
+基于 uni-app、Vue 3、Vite 和 Pinia 的微信小程序前端。现有业务页面仍使用 Mock 数据；API 请求与用户认证已接入 FastAPI 后端。
 
 ## 运行
 
@@ -8,6 +8,10 @@
 npm install
 npm run dev:mp-weixin
 ```
+
+开发环境默认请求 `http://127.0.0.1:8000/api/v1`。本地使用开发登录前，需要同时在后端开启 `DEV_AUTH_ENABLED=true`。环境配置集中在 `.env.development`、`.env.test` 和 `.env.production`；部署前必须将 `.env.production` 中的占位地址替换为已在微信公众平台登记的 HTTPS API 域名。
+
+前端的 `VITE_*` 配置会进入客户端产物，只能存放 API 地址、功能开关等公开值，不能存放微信 App Secret、JWT Secret 或数据库密码。
 
 编译结果位于 `dist/dev/mp-weixin`，可直接导入微信开发者工具。生产构建使用：
 
