@@ -1,0 +1,22 @@
+{
+  "name": "校园吃什么",
+  "appid": "wx935cae1af5a07424",
+  "description": "面向大学校园的随机选店与用餐足迹小程序",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "wx935cae1af5a07424",
+    "setting": {
+      "urlCheck": false,
+      "es6": true,
+      "minified": true
+    },
+    "usingComponents": true
+  },
+  "h5": {
+    "router": {
+      "mode": "hash"
+    }
+  }
+}

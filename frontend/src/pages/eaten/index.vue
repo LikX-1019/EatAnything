@@ -1,0 +1,73 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import PageHeader from '../../components/PageHeader.vue'
+import EmptyState from '../../components/EmptyState.vue'
+// #ifndef MP-WEIXIN
+import StickerTabBar from '../../components/StickerTabBar.vue'
+// #endif
+import { useAppStore } from '../../stores/useAppStore'
+import type { StoreItem } from '../../types'
+
+const appStore = useAppStore()
+const mode = ref<'all' | 'eaten' | 'todo'>('all')
+const list = computed(() => mode.value === 'eaten'
+  ? appStore.activeSchoolEatenStores
+  : mode.value === 'todo'
+    ? appStore.activeSchoolStores.filter((store) => !store.eaten)
+    : appStore.activeSchoolStores)
+
+function toggle(store: StoreItem) { appStore.toggleEaten(store.id) }
+</script>
+
+<template>
+  <view class="page-shell eaten-page" :class="appStore.fontClass">
+    <PageHeader title="吃过的店铺" />
+    <view class="page-pad">
+      <view class="school-line">🍀 {{ appStore.activeSchool?.name }} <text>⌄</text></view>
+      <scroll-view scroll-x class="area-tabs" :show-scrollbar="false">
+        <view v-for="area in appStore.activeAreas" :key="area.id" class="area-tab" :class="{ active: area.id === appStore.selectedAreaId }" @tap="appStore.selectArea(area.id)">{{ area.name }}</view>
+      </scroll-view>
+      <view class="segmented">
+        <view v-for="item in [{ id: 'all', label: '全部' }, { id: 'eaten', label: '吃过' }, { id: 'todo', label: '待探索' }]" :key="item.id" class="segment" :class="{ active: mode === item.id }" @tap="mode = item.id as typeof mode">{{ item.label }}</view>
+      </view>
+      <view class="progress-copy"><text>{{ appStore.activeArea?.name }} 已完成探索</text><text>{{ appStore.activeSchoolEatenStores.length }} / {{ appStore.activeSchoolStores.length }}</text></view>
+      <view class="progress-line"><view :style="{ width: `${appStore.activeSchoolStores.length ? (appStore.activeSchoolEatenStores.length / appStore.activeSchoolStores.length) * 100 : 0}%` }" /></view>
+      <view v-if="list.length" class="store-grid">
+        <view v-for="store in list" :key="store.id" class="grid-card" :class="{ 'not-eaten': !store.eaten }" @tap="toggle(store)">
+          <view class="image-wrap"><image class="grid-image" :src="store.image" mode="aspectFill" /><text v-if="store.eaten" class="check-mark">✓</text></view>
+          <text class="grid-name single-line">{{ store.name }}</text>
+          <text class="grid-address single-line">{{ store.address }}</text>
+        </view>
+      </view>
+      <EmptyState v-else title="还没有店铺记录" description="去首页抽一家，开始你的校园足迹" />
+    </view>
+    <!-- #ifndef MP-WEIXIN -->
+    <StickerTabBar />
+    <!-- #endif -->
+  </view>
+</template>
+
+<style scoped>
+.eaten-page { background: transparent; }
+.page-pad { padding: 0 30rpx; }
+.school-line { width: fit-content; margin: 6rpx auto 0; padding: 10rpx 24rpx; border: 1rpx solid #dcc4a4; background: #fff4d9; color: var(--brand-deep); font-size: 29rpx; font-weight: 900; box-shadow: var(--paper-shadow); transform: rotate(-.7deg); }
+.school-line text { margin-left: 6rpx; font-size: 28rpx; }
+.area-tabs { width: 100%; margin: 20rpx 0; white-space: nowrap; }
+.area-tab { display: inline-flex; align-items: center; height: 60rpx; margin-right: 12rpx; padding: 0 22rpx; border: 1rpx dashed #d3b894; border-radius: 9rpx; background: #fffaf0; color: #826b57; font-size: 26rpx; }
+.area-tab.active { border-style: solid; background: #f5d7cc; color: #a65245; font-weight: 800; }
+.segmented { display: flex; padding: 5rpx; border: 1rpx solid #dfc9a8; border-radius: 11rpx; background: #eee1c9; }
+.segment { flex: 1; padding: 15rpx 0; border-radius: 8rpx; color: var(--muted); font-size: 27rpx; text-align: center; }
+.segment.active { background: #fffaf0; color: var(--brand); font-weight: 900; box-shadow: 0 3rpx 7rpx rgba(103,75,42,.1); }
+.progress-copy { display: flex; justify-content: space-between; margin: 22rpx 0 8rpx; color: var(--muted); font-size: 25rpx; }
+.progress-line { height: 10rpx; overflow: hidden; border-radius: 5rpx; background: #e7d9c3; }.progress-line view { height: 100%; background: var(--green); }
+.store-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18rpx; padding: 24rpx 0; }
+.grid-card { position: relative; overflow: visible; padding: 10rpx 10rpx 14rpx; border: 1rpx solid #dec7a8; border-radius: 12rpx 7rpx 15rpx 8rpx; background: #fff9ea; box-shadow: var(--paper-shadow); transform: rotate(-.6deg); }.grid-card:nth-child(even) { background: #eef4df; transform: rotate(.8deg); }.grid-card::before { position: absolute; z-index: 2; top: -10rpx; left: 34%; width: 65rpx; height: 24rpx; background: rgba(233,175,153,.55); content: ''; transform: rotate(-4deg); }
+.image-wrap { position: relative; aspect-ratio: 1 / .82; overflow: hidden; }
+.grid-image { width: 100%; height: 100%; border-radius: 7rpx; }
+.check-mark { position: absolute; top: 8rpx; right: 8rpx; display: flex; align-items: center; justify-content: center; width: 42rpx; height: 42rpx; border: 3rpx solid #fff; border-radius: 50%; background: #67b46e; color: #fff; font-size: 25rpx; font-weight: 800; }
+.grid-name, .grid-address { display: block; padding: 0 16rpx; }
+.grid-name { margin-top: 15rpx; font-size: 30rpx; font-weight: 800; }
+.grid-address { margin: 8rpx 0 17rpx; color: var(--muted); font-size: 24rpx; }
+.not-eaten { background: #eeeae0 !important; }.not-eaten .grid-image { filter: saturate(.2); opacity: .58; }
+.not-eaten .grid-name { color: #819088; }
+</style>

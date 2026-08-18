@@ -1,0 +1,1704 @@
+openapi: 3.0.3
+info:
+  title: 今天吃什么 API
+  version: 1.0.0
+  description: |
+    “今天吃什么”决策助手 MVP 的用户端与管理端接口契约。
+    所有时间字段使用 ISO 8601 UTC 字符串；除登录接口外均使用 Bearer Token。
+  license:
+    name: Proprietary
+    url: https://choosealicense.com/no-permission/
+servers:
+  - url: /api/v1
+    description: 当前部署环境
+tags:
+  - name: Auth
+    description: 微信用户登录与访问令牌签发
+  - name: User
+    description: 当前用户资料与个人统计
+  - name: Stores
+    description: 用户端店铺浏览、详情与随机选择
+  - name: Favorites
+    description: 用户个人收藏状态与列表
+  - name: Eaten
+    description: 用户个人吃过状态与列表
+  - name: History
+    description: 随机抽取和详情浏览历史
+  - name: Reviews
+    description: 店铺评价和用户个人评价
+  - name: Admin Auth
+    description: 管理员身份认证
+  - name: Admin Stores
+    description: 店铺管理、状态维护和批量导入
+  - name: Admin Uploads
+    description: 管理端店铺图片上传
+  - name: Health
+    description: 应用存活和依赖就绪检查
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/wechat-login:
+    post:
+      operationId: wechatLogin
+      tags: [Auth]
+      summary: 微信静默登录
+      description: 使用小程序 wx.login 返回的一次性 code 换取用户访问令牌。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WechatLoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/dev-login:
+    post:
+      operationId: devLogin
+      tags: [Auth]
+      summary: 本地开发登录
+      description: 仅在非生产环境且 DEV_AUTH_ENABLED=true 时可用。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevLoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /health/live:
+    get:
+      operationId: healthLive
+      tags: [Health]
+      summary: 进程存活检查
+      security: []
+      responses:
+        '200':
+          description: 应用进程正常
+        '400':
+          description: 请求格式错误
+
+  /health/ready:
+    get:
+      operationId: healthReady
+      tags: [Health]
+      summary: PostgreSQL 和 MinIO 就绪检查
+      security: []
+      responses:
+        '200':
+          description: 依赖服务正常
+        '400':
+          description: 请求格式错误
+        '503':
+          description: PostgreSQL 或 MinIO 不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /me:
+    get:
+      operationId: getCurrentUser
+      tags: [User]
+      summary: 获取当前用户和统计
+      responses:
+        '200':
+          description: 当前用户资料
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /stores:
+    get:
+      operationId: listStores
+      tags: [Stores]
+      summary: 查询已上架店铺
+      parameters:
+        - $ref: '#/components/parameters/Keyword'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 店铺分页列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /stores/random:
+    post:
+      operationId: drawRandomStore
+      tags: [Stores]
+      summary: 随机抽取已上架店铺
+      description: |
+        从全部已上架店铺中等概率抽取并写入 RANDOM_PICK 历史。
+        候选数大于 1 时排除 excludeStoreId；只有一家候选时允许返回该店。
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RandomStoreRequest'
+      responses:
+        '200':
+          description: 随机结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RandomStoreResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: 没有已上架店铺可供抽取，业务码为 STORE_POOL_EMPTY
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /stores/{storeId}:
+    get:
+      operationId: getStoreDetail
+      tags: [Stores]
+      summary: 获取店铺详情
+      description: 读取操作不写浏览历史；页面成功展示后调用 visits 接口。
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+      responses:
+        '200':
+          description: 店铺详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /stores/{storeId}/visits:
+    post:
+      operationId: recordStoreVisit
+      tags: [History]
+      summary: 记录店铺详情浏览
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+      responses:
+        '201':
+          description: 已记录浏览
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryCreatedResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /stores/{storeId}/reviews:
+    get:
+      operationId: listStoreReviews
+      tags: [Reviews]
+      summary: 查询店铺评价
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 店铺评价分页列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /me/favorites:
+    get:
+      operationId: listFavoriteStores
+      tags: [Favorites]
+      summary: 查询我的收藏
+      parameters:
+        - $ref: '#/components/parameters/Keyword'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 收藏店铺分页列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /me/favorites/{storeId}:
+    put:
+      operationId: addFavorite
+      tags: [Favorites]
+      summary: 收藏店铺
+      description: 幂等操作，已收藏时仍返回成功。
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+      responses:
+        '200':
+          description: 收藏状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteStateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: removeFavorite
+      tags: [Favorites]
+      summary: 取消收藏
+      description: 幂等操作，未收藏时仍返回成功。
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+      responses:
+        '200':
+          description: 收藏状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteStateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /me/eaten:
+    get:
+      operationId: listEatenStores
+      tags: [Eaten]
+      summary: 查询吃过的店铺
+      parameters:
+        - $ref: '#/components/parameters/Keyword'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 吃过的店铺分页列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /me/eaten/{storeId}:
+    put:
+      operationId: markStoreEaten
+      tags: [Eaten]
+      summary: 标记店铺为吃过
+      description: 幂等操作，已标记时仍返回成功。
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+      responses:
+        '200':
+          description: 吃过状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EatenStateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: unmarkStoreEaten
+      tags: [Eaten]
+      summary: 取消吃过标记
+      description: 幂等操作；不会自动删除既有评价。
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+      responses:
+        '200':
+          description: 吃过状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EatenStateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /me/history:
+    get:
+      operationId: listMyHistory
+      tags: [History]
+      summary: 查询我的历史记录
+      parameters:
+        - name: action
+          in: query
+          required: false
+          description: 不传时返回全部类型
+          schema:
+            $ref: '#/components/schemas/HistoryAction'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 历史记录分页列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /me/reviews:
+    get:
+      operationId: listMyReviews
+      tags: [Reviews]
+      summary: 查询我的评价
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 我的评价分页列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyReviewListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /me/reviews/{storeId}:
+    put:
+      operationId: upsertMyReview
+      tags: [Reviews]
+      summary: 新增或修改我的评价
+      description: 每个用户每家店唯一；只有已标记吃过的用户可创建新评价。
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewUpsertRequest'
+      responses:
+        '200':
+          description: 评价已新增或更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyReviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: 未标记吃过，业务码为 REVIEW_REQUIRES_EATEN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteMyReview
+      tags: [Reviews]
+      summary: 删除我的评价
+      description: 幂等操作；评价不存在时仍返回 204。
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+      responses:
+        '204':
+          description: 已删除或原本不存在
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/auth/login:
+    post:
+      operationId: adminLogin
+      tags: [Admin Auth]
+      summary: 管理员登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminLoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/stores:
+    get:
+      operationId: adminListStores
+      tags: [Admin Stores]
+      summary: 管理端查询店铺
+      parameters:
+        - $ref: '#/components/parameters/Keyword'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/StoreStatus'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 管理端店铺分页列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStoreListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      operationId: adminCreateStore
+      tags: [Admin Stores]
+      summary: 新增店铺
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminStoreCreateRequest'
+      responses:
+        '201':
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStoreResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/stores/import:
+    post:
+      operationId: adminImportStores
+      tags: [Admin Stores]
+      summary: 批量导入店铺
+      description: |
+        接受最大 5 MB、最多 1000 条数据的 CSV/XLSX 文件。
+        以 storeCode 原子新增或更新，任意校验错误时整批不写入。
+        详细字段规则见 store-import-spec.md。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 导入成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreImportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/stores/{storeId}:
+    get:
+      operationId: adminGetStore
+      tags: [Admin Stores]
+      summary: 获取管理端店铺详情
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+      responses:
+        '200':
+          description: 店铺详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStoreResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: adminUpdateStore
+      tags: [Admin Stores]
+      summary: 编辑店铺或切换状态
+      description: 请求必须携带当前 version；版本不一致时返回 409。
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminStoreUpdateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStoreResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: adminArchiveStore
+      tags: [Admin Stores]
+      summary: 软删除店铺
+      description: 将店铺状态改为 closed，保留评价和历史快照。
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+        - name: version
+          in: query
+          required: true
+          description: 当前资源版本，用于并发控制
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '204':
+          description: 软删除成功
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/uploads/images:
+    post:
+      operationId: adminUploadStoreImage
+      tags: [Admin Uploads]
+      summary: 上传店铺图片
+      description: 支持 JPEG、PNG、WebP，单文件最大 5 MB。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageUploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    StoreId:
+      name: storeId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+      example: st_01JXYZ
+    Keyword:
+      name: keyword
+      in: query
+      required: false
+      description: 按店铺名称、分类或地址模糊匹配
+      schema:
+        type: string
+        maxLength: 100
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              status: 400
+              code: INVALID_ARGUMENT
+              message: 请求参数不合法
+              field: pageSize
+            requestId: req_01JXYZ
+    Unauthorized:
+      description: 未登录、登录失败或 Token 已失效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              status: 401
+              code: AUTH_REQUIRED
+              message: 登录状态已失效
+            requestId: req_01JXYZ
+    Forbidden:
+      description: 当前身份无权执行操作
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              status: 403
+              code: FORBIDDEN
+              message: 当前账号没有管理员权限
+            requestId: req_01JXYZ
+    NotFound:
+      description: 店铺或其他资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              status: 404
+              code: STORE_NOT_FOUND
+              message: 店铺不存在或已不可用
+            requestId: req_01JXYZ
+    Conflict:
+      description: 唯一编码或资源版本冲突
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            storeCode:
+              value:
+                error:
+                  status: 409
+                  code: STORE_CODE_CONFLICT
+                  message: 店铺编码已存在
+                  field: storeCode
+                requestId: req_01JXYZ
+            resourceVersion:
+              value:
+                error:
+                  status: 409
+                  code: RESOURCE_VERSION_CONFLICT
+                  message: 数据已被其他管理员修改，请刷新后重试
+                requestId: req_01JXYZ
+    PayloadTooLarge:
+      description: 上传文件超过大小限制
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              status: 413
+              code: FILE_TOO_LARGE
+              message: 文件不能超过 5 MB
+            requestId: req_01JXYZ
+    UnsupportedMediaType:
+      description: 不支持的文件类型
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              status: 415
+              code: UNSUPPORTED_FILE_TYPE
+              message: 文件类型不受支持
+            requestId: req_01JXYZ
+    UnprocessableEntity:
+      description: 文件或业务数据校验失败
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              status: 422
+              code: IMPORT_VALIDATION_FAILED
+              message: 导入文件包含错误，未写入任何店铺
+              details:
+                - row: 3
+                  field: status
+                  code: INVALID_ENUM_VALUE
+                  message: 仅允许 active、hidden、closed
+            requestId: req_01JXYZ
+    TooManyRequests:
+      description: 请求频率过高，同时返回 Retry-After 响应头
+      headers:
+        Retry-After:
+          description: 建议等待秒数
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              status: 429
+              code: RATE_LIMITED
+              message: 请求过于频繁，请稍后重试
+            requestId: req_01JXYZ
+    InternalError:
+      description: 未预期的服务端错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              status: 500
+              code: INTERNAL_ERROR
+              message: 服务暂时不可用
+            requestId: req_01JXYZ
+
+  schemas:
+    WechatLoginRequest:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: wx.login 返回的一次性临时 code
+
+    DevLoginRequest:
+      type: object
+      required: [externalId]
+      additionalProperties: false
+      properties:
+        externalId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          default: demo-user
+
+    AdminLoginRequest:
+      type: object
+      required: [username, password]
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 100
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+
+    AuthData:
+      type: object
+      required: [accessToken, tokenType, expiresIn, user]
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiresIn:
+          type: integer
+          minimum: 1
+          description: Token 剩余有效秒数
+        user:
+          $ref: '#/components/schemas/UserSummary'
+
+    AuthResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/AuthData'
+        requestId:
+          type: string
+
+    AdminAuthData:
+      type: object
+      required: [accessToken, tokenType, expiresIn, admin]
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiresIn:
+          type: integer
+          minimum: 1
+        admin:
+          $ref: '#/components/schemas/AdminSummary'
+
+    AdminAuthResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/AdminAuthData'
+        requestId:
+          type: string
+
+    UserSummary:
+      type: object
+      required: [id, nickname]
+      properties:
+        id:
+          type: string
+        nickname:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+
+    AdminSummary:
+      type: object
+      required: [id, username, displayName, roles]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [store_admin]
+
+    UserStats:
+      type: object
+      required: [favoriteCount, eatenCount, reviewCount, historyCount]
+      properties:
+        favoriteCount:
+          type: integer
+          minimum: 0
+        eatenCount:
+          type: integer
+          minimum: 0
+        reviewCount:
+          type: integer
+          minimum: 0
+        historyCount:
+          type: integer
+          minimum: 0
+
+    UserProfile:
+      allOf:
+        - $ref: '#/components/schemas/UserSummary'
+        - type: object
+          required: [stats, createdAt]
+          properties:
+            stats:
+              $ref: '#/components/schemas/UserStats'
+            createdAt:
+              type: string
+              format: date-time
+
+    UserProfileResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/UserProfile'
+        requestId:
+          type: string
+
+    StoreSummary:
+      type: object
+      required:
+        - id
+        - name
+        - category
+        - address
+        - imageUrl
+        - reviewCount
+        - isFavorite
+        - isEaten
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        address:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+        score:
+          type: number
+          format: float
+          minimum: 1
+          maximum: 5
+          nullable: true
+        reviewCount:
+          type: integer
+          minimum: 0
+        isFavorite:
+          type: boolean
+        isEaten:
+          type: boolean
+
+    StoreDetail:
+      allOf:
+        - $ref: '#/components/schemas/StoreSummary'
+        - type: object
+          required: [createdAt, updatedAt]
+          properties:
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    StoreListData:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreSummary'
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+
+    StoreListResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/StoreListData'
+        requestId:
+          type: string
+
+    StoreDetailResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/StoreDetail'
+        requestId:
+          type: string
+
+    RandomStoreRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        excludeStoreId:
+          type: string
+          nullable: true
+
+    RandomStoreData:
+      type: object
+      required: [store, historyId]
+      properties:
+        store:
+          $ref: '#/components/schemas/StoreDetail'
+        historyId:
+          type: string
+
+    RandomStoreResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/RandomStoreData'
+        requestId:
+          type: string
+
+    FavoriteState:
+      type: object
+      required: [storeId, isFavorite]
+      properties:
+        storeId:
+          type: string
+        isFavorite:
+          type: boolean
+
+    FavoriteStateResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/FavoriteState'
+        requestId:
+          type: string
+
+    EatenState:
+      type: object
+      required: [storeId, isEaten]
+      properties:
+        storeId:
+          type: string
+        isEaten:
+          type: boolean
+
+    EatenStateResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/EatenState'
+        requestId:
+          type: string
+
+    HistoryAction:
+      type: string
+      enum: [RANDOM_PICK, DETAIL_VIEW]
+
+    StoreSnapshot:
+      type: object
+      required: [id, name, category, address, imageUrl, isAvailable]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        address:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+        isAvailable:
+          type: boolean
+
+    HistoryItem:
+      type: object
+      required: [id, action, occurredAt, store]
+      properties:
+        id:
+          type: string
+        action:
+          $ref: '#/components/schemas/HistoryAction'
+        occurredAt:
+          type: string
+          format: date-time
+        store:
+          $ref: '#/components/schemas/StoreSnapshot'
+
+    HistoryCreatedResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/HistoryItem'
+        requestId:
+          type: string
+
+    HistoryListData:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryItem'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+
+    HistoryListResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/HistoryListData'
+        requestId:
+          type: string
+
+    Reviewer:
+      type: object
+      required: [displayName]
+      properties:
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+
+    Review:
+      type: object
+      required: [id, storeId, rating, content, reviewer, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        storeId:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        content:
+          type: string
+          minLength: 1
+          maxLength: 500
+        reviewer:
+          $ref: '#/components/schemas/Reviewer'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    MyReview:
+      type: object
+      required: [id, store, rating, content, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        store:
+          $ref: '#/components/schemas/StoreSnapshot'
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        content:
+          type: string
+          minLength: 1
+          maxLength: 500
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ReviewUpsertRequest:
+      type: object
+      required: [rating, content]
+      additionalProperties: false
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        content:
+          type: string
+          minLength: 1
+          maxLength: 500
+
+    ReviewListData:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Review'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+
+    ReviewListResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/ReviewListData'
+        requestId:
+          type: string
+
+    MyReviewListData:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyReview'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+
+    MyReviewListResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/MyReviewListData'
+        requestId:
+          type: string
+
+    MyReviewResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/MyReview'
+        requestId:
+          type: string
+
+    StoreStatus:
+      type: string
+      enum: [active, hidden, closed]
+
+    AdminStore:
+      type: object
+      required:
+        - id
+        - storeCode
+        - name
+        - category
+        - address
+        - status
+        - reviewCount
+        - version
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        storeCode:
+          type: string
+          pattern: '^[a-z0-9_-]{2,100}$'
+          description: 对应数据库 stores.slug
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        category:
+          type: string
+          minLength: 1
+          maxLength: 50
+        address:
+          type: string
+          minLength: 1
+          maxLength: 200
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+        status:
+          $ref: '#/components/schemas/StoreStatus'
+        score:
+          type: number
+          format: float
+          nullable: true
+        reviewCount:
+          type: integer
+          minimum: 0
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminStoreCreateRequest:
+      type: object
+      required: [storeCode, name, category, address, status]
+      additionalProperties: false
+      properties:
+        storeCode:
+          type: string
+          pattern: '^[a-z0-9_-]{2,100}$'
+          description: 服务端去除首尾空格并转为小写，对应 stores.slug
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        category:
+          type: string
+          minLength: 1
+          maxLength: 50
+        address:
+          type: string
+          minLength: 1
+          maxLength: 200
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+        status:
+          type: string
+          enum: [active, hidden, closed]
+
+    AdminStoreUpdateRequest:
+      type: object
+      required: [version]
+      minProperties: 2
+      additionalProperties: false
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        category:
+          type: string
+          minLength: 1
+          maxLength: 50
+        address:
+          type: string
+          minLength: 1
+          maxLength: 200
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+        status:
+          type: string
+          enum: [active, hidden, closed]
+
+    AdminStoreListData:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminStore'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+
+    AdminStoreListResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/AdminStoreListData'
+        requestId:
+          type: string
+
+    AdminStoreResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/AdminStore'
+        requestId:
+          type: string
+
+    ImageUploadData:
+      type: object
+      required: [url, contentType, size]
+      properties:
+        url:
+          type: string
+          format: uri
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        size:
+          type: integer
+          minimum: 1
+          maximum: 5242880
+
+    ImageUploadResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/ImageUploadData'
+        requestId:
+          type: string
+
+    ImportAction:
+      type: string
+      enum: [created, updated]
+
+    StoreImportItem:
+      type: object
+      required: [row, storeCode, storeId, action]
+      properties:
+        row:
+          type: integer
+          minimum: 2
+        storeCode:
+          type: string
+        storeId:
+          type: string
+        action:
+          $ref: '#/components/schemas/ImportAction'
+
+    StoreImportData:
+      type: object
+      required: [totalRows, createdCount, updatedCount, items]
+      properties:
+        totalRows:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        createdCount:
+          type: integer
+          minimum: 0
+        updatedCount:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreImportItem'
+
+    StoreImportResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          $ref: '#/components/schemas/StoreImportData'
+        requestId:
+          type: string
+
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        row:
+          type: integer
+          minimum: 1
+        field:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+
+    ErrorBody:
+      type: object
+      required: [status, code, message]
+      properties:
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        code:
+          type: string
+        message:
+          type: string
+        field:
+          type: string
+          nullable: true
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+
+    ErrorResponse:
+      type: object
+      required: [error, requestId]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+        requestId:
+          type: string

@@ -1,0 +1,35 @@
+from app.main import app
+
+
+def test_required_paths_are_exposed() -> None:
+    paths = app.openapi()["paths"]
+    required = {
+        "/health/live",
+        "/health/ready",
+        "/api/v1/auth/wechat-login",
+        "/api/v1/auth/dev-login",
+        "/api/v1/admin/auth/login",
+        "/api/v1/me",
+        "/api/v1/stores",
+        "/api/v1/stores/random",
+        "/api/v1/stores/{storeId}",
+        "/api/v1/stores/{storeId}/visits",
+        "/api/v1/stores/{storeId}/reviews",
+        "/api/v1/me/favorites",
+        "/api/v1/me/favorites/{storeId}",
+        "/api/v1/me/eaten",
+        "/api/v1/me/eaten/{storeId}",
+        "/api/v1/me/history",
+        "/api/v1/me/reviews",
+        "/api/v1/me/reviews/{storeId}",
+        "/api/v1/admin/stores",
+        "/api/v1/admin/stores/import",
+        "/api/v1/admin/stores/{storeId}",
+        "/api/v1/admin/uploads/images",
+    }
+    assert required <= set(paths)
+
+
+def test_admin_status_schema_uses_database_values() -> None:
+    schema = app.openapi()["components"]["schemas"]["AdminStoreCreateRequest"]
+    assert schema["properties"]["status"]["pattern"] == "^(active|hidden|closed)$"
