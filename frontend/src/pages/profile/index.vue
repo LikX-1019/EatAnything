@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { onShareAppMessage, onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShareAppMessage, onShow } from '@dcloudio/uni-app'
+import { ref } from 'vue'
 import { ApiClientError } from '../../api/types'
 import PageHeader from '../../components/PageHeader.vue'
+import FallbackImage from '../../components/FallbackImage.vue'
 // #ifndef MP-WEIXIN
 import StickerTabBar from '../../components/StickerTabBar.vue'
 // #endif
@@ -10,6 +12,8 @@ import { useUserStore } from '../../stores/useUserStore'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
+const loading = ref(true)
+const errorMessage = ref('')
 const menuItems = [
   { key: 'favorites', icon: '☆', label: '我的收藏', path: '/pages/favorites/index', color: '#f0a028' },
   { key: 'reviews', icon: '●●●', label: '我的评价', path: '/pages/reviews/index', color: '#46a8d7' },
@@ -33,21 +37,31 @@ function handleMenu(item: typeof menuItems[number]) {
 }
 
 onShareAppMessage(() => ({ title: '校园吃什么？让它帮你选一家', path: '/pages/home/index' }))
-onShow(async () => {
+async function loadProfile(refresh = false) {
+  loading.value = !refresh
+  errorMessage.value = ''
   try {
+    const shouldRefresh = userStore.initialized
     await userStore.initialize()
+    if (shouldRefresh) await userStore.refreshProfile()
   } catch (error) {
+    errorMessage.value = error instanceof ApiClientError ? error.message : '用户资料加载失败，请重试'
     uni.showToast({ title: error instanceof ApiClientError ? error.message : '用户资料加载失败', icon: 'none' })
+  } finally {
+    loading.value = false
+    if (refresh) uni.stopPullDownRefresh()
   }
-})
+}
+onShow(() => { void loadProfile() })
+onPullDownRefresh(() => { void loadProfile(true) })
 </script>
 
 <template>
   <view class="page-shell profile-page" :class="appStore.fontClass">
     <PageHeader title="我的" dark />
-    <view class="profile-hero">
+    <view v-if="loading" class="profile-state">正在加载个人资料…</view><view v-else-if="errorMessage" class="profile-state"><text>{{ errorMessage }}</text><button class="retry-button" @tap="loadProfile()">重新加载</button></view><template v-else><view class="profile-hero">
       <view class="identity">
-        <image v-if="userStore.profile?.avatarUrl" class="avatar avatar-image" :src="userStore.profile.avatarUrl" mode="aspectFill" />
+        <FallbackImage v-if="userStore.profile?.avatarUrl" class="avatar avatar-image" :src="userStore.profile.avatarUrl" />
         <view v-else class="avatar">👩🏻‍🍳</view>
         <view class="identity-copy">
           <text class="profile-name">{{ userStore.profile?.nickname || '正在登录…' }}</text>
@@ -77,7 +91,7 @@ onShow(async () => {
           <text class="arrow">›</text>
         </view>
       </template>
-    </view>
+    </view></template>
     <!-- #ifndef MP-WEIXIN -->
     <StickerTabBar />
     <!-- #endif -->
@@ -86,6 +100,7 @@ onShow(async () => {
 
 <style scoped>
 .profile-page { position: relative; background: transparent; }
+.profile-state { display: flex; align-items: center; justify-content: center; min-height: 560rpx; color: var(--muted); flex-direction: column; text-align: center; }.retry-button { margin-top: 22rpx; padding: 0 26rpx; height: 68rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 25rpx; }
 .profile-page::after { position: fixed; z-index: 0; right: 15rpx; bottom: 130rpx; color: #78966c; font-size: 68rpx; content: '🌿'; transform: rotate(-14deg); }
 .profile-hero { position: relative; z-index: 1; margin: 14rpx 26rpx 0; padding: 22rpx 18rpx 20rpx; border: 1rpx solid #e1c8a5; border-radius: 5rpx 12rpx 7rpx 9rpx; background: #fffaf0; color: var(--ink); box-shadow: var(--paper-shadow); }
 .profile-hero::before, .profile-hero::after { position: absolute; top: -11rpx; width: 84rpx; height: 27rpx; background: rgba(228,192,142,.48); content: ''; }.profile-hero::before { left: 25rpx; transform: rotate(-7deg); }.profile-hero::after { right: 25rpx; transform: rotate(7deg); }

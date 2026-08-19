@@ -1,8 +1,10 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { getStores, randomStore } from '@/api/stores'
-import { mockHistory, mockReviews } from '@/data/mock'
-import type { HistoryAction, HistoryItem, ReviewItem, StoreArea, StoreItem } from '@/types'
+import { getStoreDetail, getStores, randomStore, recordStoreVisit, type StoreDetail } from '@/api/stores'
+import { createCheckIn as createCheckInRequest } from '@/api/checkins'
+import { getFavorites, addFavorite, removeFavorite, getEaten } from '@/api/states'
+import { getHistory, type HistoryRecord } from '@/api/history'
+import type { StoreArea, StoreItem } from '@/types'
 import { useUserStore } from './useUserStore'
 
 const AREA_STORAGE_KEY = 'eat-anything:area-by-school'
@@ -34,16 +36,17 @@ function loadAreaMap(): Record<string, string> {
 export const useAppStore = defineStore('app', () => {
   const userStore = useUserStore()
   const stores = ref<StoreItem[]>([])
-  const reviews = ref<ReviewItem[]>(mockReviews.map((item) => ({ ...item })))
-  const history = ref<HistoryItem[]>(mockHistory.map((item) => ({ ...item })))
+  const history = ref<HistoryRecord[]>([])
   const areaBySchool = ref(loadAreaMap())
   const selectedAreaId = ref('')
   const currentPick = ref<StoreItem | null>(null)
   const lockedPickId = ref<string | null>(null)
   const checkedInPickId = ref<string | null>(null)
   const storesLoaded = ref(false)
+  const behaviorLoaded = ref(false)
   const fontPreference = ref<FontPreference>(loadFontPreference())
   let storesPromise: Promise<void> | null = null
+  let behaviorPromise: Promise<void> | null = null
   applyFontPreferenceToHost(fontPreference.value)
 
   const activeSchool = computed(() => userStore.currentSchool)
@@ -91,8 +94,14 @@ export const useAppStore = defineStore('app', () => {
 
     if (!storesPromise) {
       storesPromise = (async () => {
-        const page = await getStores({ page: 1, pageSize: 100 })
-        stores.value = page.items
+        const firstPage = await getStores({ page: 1, pageSize: 100 })
+        const items = [...firstPage.items]
+        for (let page = 2; items.length < firstPage.total; page += 1) {
+          const nextPage = await getStores({ page, pageSize: 100 })
+          if (!nextPage.items.length) break
+          items.push(...nextPage.items)
+        }
+        stores.value = items
         storesLoaded.value = true
         restoreAreaSelection()
       })().finally(() => {
@@ -105,13 +114,88 @@ export const useAppStore = defineStore('app', () => {
 
   async function initialize(): Promise<void> {
     await userStore.initialize()
-    await loadStores()
+    if (!behaviorLoaded.value && !behaviorPromise) {
+      behaviorPromise = (async () => {
+        await loadStores()
+        await Promise.all([loadFavorites(), loadEaten(), loadHistory()])
+        behaviorLoaded.value = true
+      })().finally(() => {
+        behaviorPromise = null
+      })
+    }
+    await behaviorPromise
   }
 
   async function reloadForSchool(): Promise<void> {
     selectedAreaId.value = ''
     clearPick()
     await loadStores(true)
+    await Promise.all([loadFavorites(), loadEaten()])
+    behaviorLoaded.value = true
+  }
+
+  async function refresh(): Promise<void> {
+    await userStore.initialize()
+    await userStore.refreshProfile()
+    await loadStores(true)
+    await Promise.all([loadFavorites(), loadEaten(), loadHistory()])
+    behaviorLoaded.value = true
+  }
+
+  function patchStoreState(storeId: string, patch: Partial<Pick<StoreItem, 'isFavorite' | 'isEaten'>>): void {
+    const target = findStore(storeId)
+    if (target) Object.assign(target, patch)
+  }
+
+  function mergeStores(items: StoreItem[]): void {
+    for (const item of items) {
+      const existingIndex = stores.value.findIndex((store) => store.id === item.id)
+      if (existingIndex >= 0) stores.value.splice(existingIndex, 1, { ...stores.value[existingIndex], ...item })
+      else stores.value.push(item)
+    }
+  }
+
+  async function loadFavorites(): Promise<void> {
+    const firstPage = await getFavorites({ page: 1, pageSize: 100 })
+    const items = [...firstPage.items]
+    for (let page = 2; items.length < firstPage.total; page += 1) {
+      const nextPage = await getFavorites({ page, pageSize: 100 })
+      if (!nextPage.items.length) break
+      items.push(...nextPage.items)
+    }
+    mergeStores(items.map((store) => ({ ...store, isFavorite: true })))
+    const favoriteIds = new Set(items.map((store) => store.id))
+    const schoolId = userStore.profile?.schoolId
+    for (const store of stores.value) {
+      if (store.schoolId === schoolId && !favoriteIds.has(store.id)) store.isFavorite = false
+    }
+  }
+
+  async function loadEaten(): Promise<void> {
+    const firstPage = await getEaten({ page: 1, pageSize: 100 })
+    const items = [...firstPage.items]
+    for (let page = 2; items.length < firstPage.total; page += 1) {
+      const nextPage = await getEaten({ page, pageSize: 100 })
+      if (!nextPage.items.length) break
+      items.push(...nextPage.items)
+    }
+    mergeStores(items.map((store) => ({ ...store, isEaten: true })))
+    const eatenIds = new Set(items.map((store) => store.id))
+    const schoolId = userStore.profile?.schoolId
+    for (const store of stores.value) {
+      if (store.schoolId === schoolId && !eatenIds.has(store.id)) store.isEaten = false
+    }
+  }
+
+  async function loadHistory(): Promise<void> {
+    const firstPage = await getHistory(1, 100)
+    const items = [...firstPage.items]
+    for (let page = 2; items.length < firstPage.total; page += 1) {
+      const nextPage = await getHistory(page, 100)
+      if (!nextPage.items.length) break
+      items.push(...nextPage.items)
+    }
+    history.value = items
   }
 
   function selectArea(areaId: string): boolean {
@@ -135,12 +219,6 @@ export const useAppStore = defineStore('app', () => {
     return area ? { id: area, name: area } : undefined
   }
 
-  function addHistory(storeId: string | number, action: HistoryAction) {
-    const now = new Date()
-    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    history.value.unshift({ id: Date.now(), storeId, action, date: `今天 ${time}` })
-  }
-
   async function drawRandomStore(): Promise<StoreItem> {
     const result = await randomStore(currentPick.value?.id)
     const next = result.store
@@ -157,19 +235,6 @@ export const useAppStore = defineStore('app', () => {
     if (!currentPick.value) return false
     lockedPickId.value = currentPick.value.id
     checkedInPickId.value = null
-    addHistory(currentPick.value.id, '锁定选择')
-    return true
-  }
-
-  function checkInCurrentPick() {
-    if (!currentPick.value || !isPickLocked.value) return false
-    const target = findStore(currentPick.value.id)
-    if (!target) return false
-    target.isEaten = true
-    if (checkedInPickId.value !== target.id) {
-      addHistory(target.id, '到店打卡')
-      checkedInPickId.value = target.id
-    }
     return true
   }
 
@@ -182,22 +247,58 @@ export const useAppStore = defineStore('app', () => {
 
   function continueAfterCheckIn() { clearPick() }
 
-  function toggleFavorite(storeId: string) {
+  const favoritePromises = new Map<string, Promise<boolean>>()
+
+  async function toggleFavorite(storeId: string): Promise<boolean> {
+    const pending = favoritePromises.get(storeId)
+    if (pending) return pending
+
+    const operation = toggleFavoriteInternal(storeId).finally(() => {
+      if (favoritePromises.get(storeId) === operation) favoritePromises.delete(storeId)
+    })
+    favoritePromises.set(storeId, operation)
+    return operation
+  }
+
+  async function toggleFavoriteInternal(storeId: string): Promise<boolean> {
     const target = findStore(storeId)
-    if (target) {
-      target.isFavorite = !target.isFavorite
-      if (target.isFavorite) addHistory(target.id, '加入收藏')
+    if (!target) return false
+    const nextValue = !target.isFavorite
+    const result = nextValue ? await addFavorite(storeId) : await removeFavorite(storeId)
+    patchStoreState(storeId, { isFavorite: result.isFavorite })
+    await refreshProfileAfterWrite()
+    return result.isFavorite
+  }
+
+  async function createCheckIn(storeId: string, filePath: string, note?: string): Promise<void> {
+    await createCheckInRequest(storeId, filePath, note)
+    patchStoreState(storeId, { isEaten: true })
+    await refreshProfileAfterWrite()
+  }
+
+  async function refreshProfileAfterWrite(): Promise<void> {
+    try {
+      await userStore.refreshProfile()
+    } catch {
+      // The behavior write already succeeded; refresh the counters again when Profile opens.
     }
-    return target?.isFavorite ?? false
   }
 
-  function toggleEaten(storeId: string) {
-    const target = findStore(storeId)
-    if (target) target.isEaten = !target.isEaten
-    return target?.isEaten ?? false
+  async function refreshStore(storeId: string): Promise<StoreDetail> {
+    const detail = await getStoreDetail(storeId)
+    mergeStores([detail])
+    if (currentPick.value?.id === detail.id) currentPick.value = detail
+    return detail
   }
 
-  function recordVisit(storeId: string) { addHistory(storeId, '浏览店铺') }
+  async function recordVisit(storeId: string): Promise<void> {
+    try {
+      await recordStoreVisit(storeId)
+      await loadHistory()
+    } catch {
+      // Visit history is secondary to opening a store detail page.
+    }
+  }
 
   function setFontPreference(preference: FontPreference) {
     fontPreference.value = preference
@@ -205,17 +306,12 @@ export const useAppStore = defineStore('app', () => {
     applyFontPreferenceToHost(preference)
   }
 
-  function addReview(storeId: string, rating: number, content: string) {
-    reviews.value.unshift({ id: Date.now(), storeId, rating, content, date: `${new Date().getMonth() + 1}月${new Date().getDate()}日` })
-    addHistory(storeId, '提交评价')
-  }
-
   return {
-    stores, reviews, history, selectedAreaId, activeSchool, activeAreas, activeArea,
+    stores, history, selectedAreaId, activeSchool, activeAreas, activeArea,
     activeSchoolStores, activeAreaStores, activeSchoolEatenStores, activeSchoolFavoriteStores, currentPick,
     isPickLocked, isCurrentPickCheckedIn, eatenStores, favoriteStores, storesLoaded, initialize, loadStores,
-    reloadForSchool, selectArea, findStore, findArea, drawRandomStore, lockCurrentPick, checkInCurrentPick,
-    unlockCurrentPick, continueAfterCheckIn, toggleFavorite, toggleEaten, recordVisit, addReview,
+    reloadForSchool, refresh, selectArea, findStore, findArea, drawRandomStore, lockCurrentPick,
+    unlockCurrentPick, continueAfterCheckIn, patchStoreState, toggleFavorite, createCheckIn, refreshStore, recordVisit,
     fontPreference, fontClass, setFontPreference,
   }
 })

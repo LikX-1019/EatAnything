@@ -19,6 +19,8 @@ def test_required_paths_are_exposed() -> None:
         "/api/v1/me/favorites/{storeId}",
         "/api/v1/me/eaten",
         "/api/v1/me/eaten/{storeId}",
+        "/api/v1/stores/{storeId}/check-ins",
+        "/api/v1/me/check-ins",
         "/api/v1/me/history",
         "/api/v1/me/reviews",
         "/api/v1/me/reviews/{storeId}",

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onShow } from '@dcloudio/uni-app'
+import { ref } from 'vue'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import { ApiClientError } from '../../api/types'
 import EmptyState from '../../components/EmptyState.vue'
 import StoreRow from '../../components/StoreRow.vue'
@@ -8,16 +9,28 @@ import { useAppStore } from '../../stores/useAppStore'
 import type { StoreItem } from '../../types'
 
 const appStore = useAppStore()
-onShow(async () => {
-  try { await appStore.initialize() }
-  catch (error) { uni.showToast({ title: error instanceof ApiClientError ? error.message : '店铺数据加载失败', icon: 'none' }) }
-})
+const loading = ref(true)
+const errorMessage = ref('')
+async function loadFavorites(refresh = false) {
+  loading.value = !refresh
+  errorMessage.value = ''
+  try { if (refresh) await appStore.refresh(); else await appStore.initialize() }
+  catch (error) { errorMessage.value = error instanceof ApiClientError ? error.message : '收藏加载失败，请重试'; uni.showToast({ title: errorMessage.value, icon: 'none' }) }
+  finally { loading.value = false; if (refresh) uni.stopPullDownRefresh() }
+}
+onShow(() => { void loadFavorites() })
+onPullDownRefresh(() => { void loadFavorites(true) })
 function manage(store: StoreItem) {
   uni.showActionSheet({
-    itemList: ['取消收藏', store.isEaten ? '标记为未吃过' : '标记为吃过'],
-    success: ({ tapIndex }) => {
-      if (tapIndex === 0) appStore.toggleFavorite(store.id)
-      if (tapIndex === 1) appStore.toggleEaten(store.id)
+    itemList: ['取消收藏'],
+    success: async ({ tapIndex }) => {
+      if (tapIndex !== 0) return
+      try {
+        await appStore.toggleFavorite(store.id)
+        uni.showToast({ title: '已取消收藏', icon: 'none' })
+      } catch (error) {
+        uni.showToast({ title: error instanceof ApiClientError ? error.message : '操作失败', icon: 'none' })
+      }
     }
   })
 }
@@ -30,9 +43,7 @@ function manage(store: StoreItem) {
       <view class="school-line">{{ appStore.activeSchool?.name }} <text>⌄</text></view>
       <scroll-view scroll-x class="area-tabs" :show-scrollbar="false"><view v-for="area in appStore.activeAreas" :key="area.id" class="area-tab" :class="{ active: area.id === appStore.selectedAreaId }" @tap="appStore.selectArea(area.id)">{{ area.name }}</view></scroll-view>
       <scroll-view scroll-x class="filters" :show-scrollbar="false"><view class="filter active">已收藏</view><view class="filter">全部</view><view class="filter">评分高</view></scroll-view>
-      <text class="summary">共收藏 {{ appStore.activeSchoolFavoriteStores.length }} 家校园店铺</text>
-      <view v-if="appStore.activeSchoolFavoriteStores.length" class="list"><StoreRow v-for="store in appStore.activeSchoolFavoriteStores" :key="store.id" :store="store" @press="manage" /></view>
-      <EmptyState v-else title="还没有收藏" description="把喜欢的校园店铺先收藏起来" />
+      <view v-if="loading" class="page-state">正在加载收藏…</view><view v-else-if="errorMessage" class="page-state"><text>{{ errorMessage }}</text><button class="retry-button" @tap="loadFavorites()">重新加载</button></view><template v-else><text class="summary">共收藏 {{ appStore.activeSchoolFavoriteStores.length }} 家校园店铺</text><view v-if="appStore.activeSchoolFavoriteStores.length" class="list"><StoreRow v-for="store in appStore.activeSchoolFavoriteStores" :key="store.id" :store="store" @press="manage" /></view><EmptyState v-else title="还没有收藏店铺" description="把喜欢的校园店铺先收藏起来" /></template>
     </view>
   </view>
 </template>
@@ -40,6 +51,7 @@ function manage(store: StoreItem) {
 <style scoped>
 .favorites-page { background: var(--page); }
 .page-pad { padding: 0 30rpx; }
+.page-state { padding: 80rpx 20rpx; color: var(--muted); text-align: center; }.retry-button { display: block; margin: 22rpx auto 0; padding: 0 26rpx; height: 68rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 25rpx; }
 .school-line { margin: 8rpx 0 18rpx; color: var(--brand); font-size: 25rpx; font-weight: 800; }
 .school-line text { margin-left: 6rpx; font-size: 28rpx; }
 .area-tabs, .filters { width: 100%; white-space: nowrap; }

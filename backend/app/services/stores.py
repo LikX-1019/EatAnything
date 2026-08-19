@@ -107,6 +107,10 @@ async def user_store_page(
             .where(relation.user_id == user_id)
             .distinct()
         )
+        if school_id is not None:
+            query = query.where(Store.school_id == school_id)
+        else:
+            return [], 0
         if keyword:
             pattern = f"%{keyword.strip()}%"
             query = query.where(or_(Store.name.ilike(pattern), Store.address.ilike(pattern), Store.slug.ilike(pattern)))

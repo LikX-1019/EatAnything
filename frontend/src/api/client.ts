@@ -19,6 +19,8 @@ type RecordValue = Record<string, unknown>
 type AuthRefreshHandler = (staleToken: string | null) => Promise<void>
 
 let authRefreshHandler: AuthRefreshHandler | null = null
+const DEFAULT_API_TIMEOUT = 15000
+const DEFAULT_UPLOAD_TIMEOUT = 45000
 
 export function setAuthRefreshHandler(handler: AuthRefreshHandler): void {
   authRefreshHandler = handler
@@ -110,6 +112,23 @@ interface UniRequestFailure {
   errMsg?: string
 }
 
+function networkError(failure: UniRequestFailure, fallback: string): ApiClientError {
+  const message = failure.errMsg || fallback
+  const isTimeout = /timeout|timed out|超时/i.test(message)
+  return new ApiClientError(message, {
+    code: isTimeout ? 'NETWORK_TIMEOUT' : 'NETWORK_ERROR',
+    cause: failure,
+  })
+}
+
+export interface UploadOptions {
+  url: string
+  filePath: string
+  name?: string
+  formData?: Record<string, string>
+  timeout?: number
+}
+
 function sendRequest<TData>(options: RequestOptions<TData>, token: string | null): Promise<TransportResult> {
   const headers: RequestHeaders = {
     'Content-Type': 'application/json',
@@ -126,16 +145,13 @@ function sendRequest<TData>(options: RequestOptions<TData>, token: string | null
       method: options.method ?? 'GET',
       data: options.data as UniNamespace.RequestOptions['data'],
       header: headers,
-      timeout: options.timeout,
+      timeout: options.timeout ?? DEFAULT_API_TIMEOUT,
       dataType: 'json',
       success: (response) => resolve({
         data: normalizeResponseData(response.data),
         statusCode: response.statusCode,
       }),
-      fail: (failure: UniRequestFailure) => reject(new ApiClientError(
-        failure.errMsg || 'Unable to reach the server',
-        { code: 'NETWORK_ERROR', cause: failure },
-      )),
+      fail: (failure: UniRequestFailure) => reject(networkError(failure, 'Unable to reach the server')),
     })
   })
 }
@@ -145,6 +161,7 @@ async function executeRequest<T, TData>(options: RequestOptions<TData>, retryCou
   const response = await sendRequest(options, tokenUsed)
 
   if (response.statusCode >= 200 && response.statusCode < 300) {
+    if (response.statusCode === 204) return undefined as T
     return unwrapApiResponse<T>(response.data, response.statusCode)
   }
 
@@ -199,4 +216,58 @@ export function put<T, TData = unknown>(url: string, data?: TData, options: Requ
 
 export function del<T>(url: string, options: RequestOverrides<never> = {}): Promise<T> {
   return request<T>({ ...options, url, method: 'DELETE' })
+}
+
+interface UploadTransportResult {
+  data: unknown
+  statusCode: number
+}
+
+function sendUpload(options: UploadOptions, token: string | null): Promise<UploadTransportResult> {
+  return new Promise((resolve, reject) => {
+    uni.uploadFile({
+      url: joinUrl(env.apiBaseUrl, options.url),
+      filePath: options.filePath,
+      name: options.name ?? 'file',
+      formData: options.formData,
+      header: token ? { Authorization: `Bearer ${token}` } : {},
+      timeout: options.timeout ?? DEFAULT_UPLOAD_TIMEOUT,
+      success: (response) => resolve({
+        data: normalizeResponseData(response.data),
+        statusCode: response.statusCode,
+      }),
+      fail: (failure: UniRequestFailure) => reject(networkError(failure, 'Unable to upload the file')),
+    })
+  })
+}
+
+async function executeUpload<T>(options: UploadOptions, retryCount: number): Promise<T> {
+  const tokenUsed = getAccessToken()
+  const response = await sendUpload(options, tokenUsed)
+  if (response.statusCode >= 200 && response.statusCode < 300) {
+    if (response.statusCode === 204) return undefined as T
+    return unwrapApiResponse<T>(response.data, response.statusCode)
+  }
+
+  if (response.statusCode === 401 && retryCount === 0) {
+    if (!authRefreshHandler) {
+      clearAccessToken()
+      throw new ApiClientError('Authentication refresh is not configured', {
+        status: 401,
+        code: 'AUTH_REFRESH_UNAVAILABLE',
+      })
+    }
+    await authRefreshHandler(tokenUsed)
+    return executeUpload<T>(options, retryCount + 1)
+  }
+
+  if (response.statusCode === 401) {
+    const currentToken = getAccessToken()
+    if (!currentToken || currentToken === tokenUsed) clearAccessToken()
+  }
+  throw toApiClientError(response.data, response.statusCode)
+}
+
+export function uploadFile<T>(url: string, filePath: string, formData?: Record<string, string>): Promise<T> {
+  return executeUpload<T>({ url, filePath, formData }, 0)
 }

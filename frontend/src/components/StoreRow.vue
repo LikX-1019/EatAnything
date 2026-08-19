@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { StoreItem } from '../types'
 import { storeImageUrl, storeScoreLabel } from '../utils/store'
+import FallbackImage from './FallbackImage.vue'
 defineProps<{ store: StoreItem }>()
 defineEmits<{ (event: 'press', store: StoreItem): void }>()
 </script>
@@ -8,7 +9,7 @@ defineEmits<{ (event: 'press', store: StoreItem): void }>()
 <template>
   <view class="store-row" hover-class="tap-active" @tap="$emit('press', store)">
     <text class="row-tape" />
-    <image class="store-image" :src="storeImageUrl(store)" mode="aspectFill" />
+    <FallbackImage class="store-image" :src="storeImageUrl(store)" />
     <view class="store-info">
       <view class="name-line">
         <text class="store-name single-line">{{ store.name }}</text>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import { feedComments } from '../../data/mock'
 import { ApiClientError } from '../../api/types'
 import PageHeader from '../../components/PageHeader.vue'
+import FallbackImage from '../../components/FallbackImage.vue'
 // #ifndef MP-WEIXIN
 import StickerTabBar from '../../components/StickerTabBar.vue'
 // #endif
@@ -14,6 +15,9 @@ import { storeImageUrl, storeScoreLabel } from '../../utils/store'
 const appStore = useAppStore()
 const userStore = useUserStore()
 const isDrawing = ref(false)
+const isCheckingIn = ref(false)
+const loading = ref(true)
+const loadError = ref('')
 const rollingName = ref('准备好了吗？')
 let shuffleTimer: ReturnType<typeof setInterval> | null = null
 let finishTimer: ReturnType<typeof setTimeout> | null = null
@@ -25,13 +29,22 @@ function showError(error: unknown, fallback: string) {
   uni.showToast({ title: error instanceof ApiClientError ? error.message : fallback, icon: 'none' })
 }
 
-onShow(async () => {
+async function loadHome(refresh = false) {
+  loading.value = !refresh
+  loadError.value = ''
   try {
-    await appStore.initialize()
+    if (refresh) await appStore.refresh()
+    else await appStore.initialize()
   } catch (error) {
+    loadError.value = error instanceof ApiClientError ? error.message : '首页加载失败，请重试'
     showError(error, '核心数据加载失败')
+  } finally {
+    loading.value = false
+    if (refresh) uni.stopPullDownRefresh()
   }
-})
+}
+onShow(() => { void loadHome() })
+onPullDownRefresh(() => { void loadHome(true) })
 
 function chooseSchool() { uni.navigateTo({ url: '/pages/schools/index' }) }
 function chooseArea(id: string) { appStore.selectArea(id) }
@@ -71,12 +84,43 @@ function togglePickLock() {
   }
   if (appStore.lockCurrentPick()) uni.showToast({ title: '已锁定这家店', icon: 'none' })
 }
-function toggleFavorite() {
+async function toggleFavorite() {
   if (!appStore.currentPick) return
-  const active = appStore.toggleFavorite(appStore.currentPick.id)
-  uni.showToast({ title: active ? '已加入收藏' : '已取消收藏', icon: 'none' })
+  try {
+    const active = await appStore.toggleFavorite(appStore.currentPick.id)
+    uni.showToast({ title: active ? '已加入收藏' : '已取消收藏', icon: 'none' })
+  } catch (error) {
+    showError(error, '收藏操作失败')
+  }
 }
-function checkIn() { if (appStore.checkInCurrentPick()) uni.showToast({ title: '打卡成功，已加入足迹', icon: 'success' }) }
+function chooseCheckInImage(): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    uni.chooseImage({
+      count: 1,
+      sizeType: ['compressed'],
+      sourceType: ['album', 'camera'],
+      success: (result) => resolve(result.tempFilePaths[0] || null),
+      fail: (error) => {
+        if (error.errMsg?.toLowerCase().includes('cancel')) resolve(null)
+        else reject(new ApiClientError(error.errMsg || '选择图片失败', { code: 'IMAGE_PICK_FAILED', cause: error }))
+      },
+    })
+  })
+}
+async function checkIn() {
+  if (!appStore.currentPick || !appStore.isPickLocked || isCheckingIn.value) return
+  try {
+    const filePath = await chooseCheckInImage()
+    if (!filePath) return
+    isCheckingIn.value = true
+    await appStore.createCheckIn(appStore.currentPick.id, filePath)
+    uni.showToast({ title: '打卡成功，已加入足迹', icon: 'success' })
+  } catch (error) {
+    showError(error, '打卡失败，请重试')
+  } finally {
+    isCheckingIn.value = false
+  }
+}
 onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTimer) clearTimeout(finishTimer) })
 </script>
 
@@ -84,6 +128,9 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
   <view class="page-shell home-page" :class="appStore.fontClass">
     <PageHeader title="今天吃什么" weather />
     <view class="content-width home-content">
+      <view v-if="loading" class="page-state">正在加载首页…</view>
+      <view v-else-if="loadError" class="page-state"><text>{{ loadError }}</text><button class="retry-button" @tap="loadHome()">重新加载</button></view>
+      <template v-else>
       <view class="scope-card">
         <button class="school-button" hover-class="tap-active" @tap="chooseSchool">📌 {{ userStore.profile?.school?.name || '选择学校' }} <text class="chevron">⌄</text></button>
         <scroll-view scroll-x class="area-tabs" :show-scrollbar="false">
@@ -97,7 +144,7 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
           <view class="lucky-paper">
             <text class="sun-mark">☀</text><text class="lucky-label">幸运抽签</text>
             <template v-if="appStore.currentPick && !isDrawing">
-              <image class="picked-image" :src="storeImageUrl(appStore.currentPick)" mode="aspectFill" />
+              <FallbackImage class="picked-image" :src="storeImageUrl(appStore.currentPick)" />
               <text class="picked-name">{{ appStore.currentPick.name }}</text>
               <text class="picked-meta">{{ appStore.currentPick.category }} · ★ {{ storeScoreLabel(appStore.currentPick) }}</text>
               <text class="picked-address">⌖ {{ appStore.currentPick.address }}</text>
@@ -115,7 +162,7 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
         <button class="favorite-button" @tap="toggleFavorite">{{ appStore.currentPick.isFavorite ? '♥ 已收藏' : '♡ 收藏' }}</button>
         <button class="lock-button" :class="{ locked: appStore.isPickLocked }" @tap="togglePickLock">{{ appStore.isPickLocked ? '↶ 取消锁定' : '✓ 就吃这家！' }}</button>
       </view>
-      <view v-if="appStore.isPickLocked" class="check-in-row"><text>这顿就这么定啦，到了记得打卡～</text><button @tap="checkIn">到店打卡</button></view>
+      <view v-if="appStore.isPickLocked" class="check-in-row"><text>这顿就这么定啦，到了记得打卡～</text><button :disabled="isCheckingIn" @tap="checkIn">{{ isCheckingIn ? '上传中' : '到店打卡' }}</button></view>
       <view class="section-heading"><text>大家刚刚吃了</text><text>{{ appStore.activeArea?.name }} · {{ appStore.activeAreaStores.length }} 家可抽</text></view>
       <view class="activity-list">
         <view v-for="({ comment, store }, index) in visibleComments" :key="comment.id" class="activity-item" :class="`note-${index % 3}`">
@@ -123,6 +170,7 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
           <view class="activity-copy"><view class="activity-title"><text>{{ comment.user }}</text><text class="rating">{{ store?.name }}</text></view><text class="activity-comment">{{ comment.content }}</text><text class="activity-time">{{ comment.time }}</text></view>
         </view>
       </view>
+      </template>
     </view>
     <!-- #ifndef MP-WEIXIN -->
     <StickerTabBar />
@@ -133,6 +181,7 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
 <style scoped>
 .home-page { background: transparent; }
 .home-content { position: relative; padding: 18rpx 30rpx 24rpx; overflow: hidden; }
+.page-state { display: flex; align-items: center; justify-content: center; min-height: 520rpx; padding: 40rpx; color: var(--muted); font-size: 28rpx; flex-direction: column; text-align: center; }.retry-button { margin-top: 22rpx; padding: 0 26rpx; height: 70rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 26rpx; }
 .scope-card { margin-top: 12rpx; padding: 14rpx 16rpx; border: 1rpx dashed #d5b990; border-radius: 12rpx; background: rgba(255,250,236,.62); }.school-button { display: inline-flex; align-items: center; height: 48rpx; padding: 0; color: var(--brand-deep); font-size: 27rpx; font-weight: 800; }.chevron { margin-left: 4rpx; }.area-tabs { width: 100%; margin-top: 10rpx; white-space: nowrap; }.area-tab { display: inline-flex; align-items: center; height: 56rpx; margin-right: 10rpx; padding: 0 22rpx; border: 1rpx solid #dfc8a5; border-radius: 7rpx 12rpx 8rpx 11rpx; background: #fffaf0; color: #806b56; font-size: 25rpx; }.area-tab.active { border-color: #e38b78; background: #f8d8ce; color: #a85043; font-weight: 800; box-shadow: 0 3rpx 0 #dca092; }
 .random-scope-note { display: block; margin-top: 8rpx; color: var(--muted); font-size: 20rpx; }
 .lucky-stage { position: relative; min-height: 515rpx; margin: 20rpx 16rpx 0; padding: 25rpx 30rpx 68rpx; border: 3rpx solid rgba(220,145,125,.52); border-radius: 20rpx; background: rgba(244,180,165,.32); box-shadow: inset 0 0 0 12rpx rgba(255,255,255,.23); }.lucky-stage::before { position: absolute; top: 12rpx; right: 16rpx; bottom: 12rpx; left: 16rpx; border: 2rpx dashed rgba(195,115,95,.35); border-radius: 16rpx; content: ''; }.corner-flower, .corner-star { position: absolute; z-index: 3; color: var(--brand); font-size: 35rpx; }.corner-flower { top: 16rpx; left: 18rpx; }.corner-star { top: 20rpx; right: 22rpx; color: var(--amber); }

@@ -1,24 +1,39 @@
 <script setup lang="ts">
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
+import { ref } from 'vue'
 import { ApiClientError } from '../../api/types'
 import EmptyState from '../../components/EmptyState.vue'
 import { useAppStore } from '../../stores/useAppStore'
 import PageHeader from '../../components/PageHeader.vue'
 import { storeImageUrl } from '../../utils/store'
+import FallbackImage from '../../components/FallbackImage.vue'
 const appStore = useAppStore()
-onShow(async () => {
-  try { await appStore.initialize() }
-  catch (error) { uni.showToast({ title: error instanceof ApiClientError ? error.message : '店铺数据加载失败', icon: 'none' }) }
-})
+const loading = ref(true)
+const errorMessage = ref('')
+function formatHistoryTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+async function loadHistory(refresh = false) {
+  loading.value = !refresh
+  errorMessage.value = ''
+  try { if (refresh) await appStore.refresh(); else await appStore.initialize() }
+  catch (error) { errorMessage.value = error instanceof ApiClientError ? error.message : '历史记录加载失败，请重试'; uni.showToast({ title: errorMessage.value, icon: 'none' }) }
+  finally { loading.value = false; if (refresh) uni.stopPullDownRefresh() }
+}
+onShow(() => { void loadHistory() })
+onPullDownRefresh(() => { void loadHistory(true) })
 </script>
 
 <template>
-  <view class="page-shell history-page" :class="appStore.fontClass"><PageHeader title="历史记录" back /><view class="page-pad"><view v-if="appStore.history.length" class="timeline"><view v-for="item in appStore.history" :key="item.id" class="history-item"><view class="dot" :class="{ green: item.action === '到店打卡' }" /><image class="history-image" :src="storeImageUrl(appStore.findStore(item.storeId))" mode="aspectFill" /><view class="history-copy"><text class="history-name">{{ appStore.findStore(item.storeId)?.name }}</text><text class="history-action">{{ item.action }} · {{ appStore.findArea(appStore.findStore(item.storeId))?.name }}</text><text class="history-date">{{ item.date }}</text></view></view></view><EmptyState v-else title="还没有历史记录" description="浏览或抽取店铺后会显示在这里" /></view></view>
+  <view class="page-shell history-page" :class="appStore.fontClass"><PageHeader title="历史记录" back /><view class="page-pad"><view v-if="loading" class="page-state">正在加载历史记录…</view><view v-else-if="errorMessage" class="page-state"><text>{{ errorMessage }}</text><button class="retry-button" @tap="loadHistory()">重新加载</button></view><template v-else><view v-if="appStore.history.length" class="timeline"><view v-for="item in appStore.history" :key="item.id" class="history-item"><view class="dot" :class="{ green: item.action === 'DETAIL_VIEW' }" /><FallbackImage class="history-image" :src="storeImageUrl(item.store)" /><view class="history-copy"><text class="history-name">{{ item.store.name }}</text><text class="history-action">{{ item.action === 'RANDOM_PICK' ? '随机抽取' : '浏览店铺' }} · {{ item.store.area || '未分区' }}</text><text class="history-date">{{ formatHistoryTime(item.occurredAt) }}</text></view></view></view><EmptyState v-else title="暂无抽店或浏览记录" description="浏览或抽取店铺后会显示在这里" /></template></view></view>
 </template>
 
 <style scoped>
 .history-page { background: #fff; }
 .page-pad { padding: 28rpx 30rpx; }
+.page-state { padding: 80rpx 20rpx; color: var(--muted); text-align: center; }.retry-button { display: block; margin: 22rpx auto 0; padding: 0 26rpx; height: 68rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 25rpx; }
 .timeline { position: relative; padding-left: 12rpx; }
 .timeline::before { position: absolute; top: 30rpx; bottom: 30rpx; left: 18rpx; width: 2rpx; background: var(--line); content: ''; }
 .history-item { position: relative; display: flex; min-height: 144rpx; padding: 14rpx 0 22rpx 42rpx; border-bottom: 1rpx solid var(--line); }

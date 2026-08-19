@@ -23,6 +23,8 @@ export const useUserStore = defineStore('user', () => {
     return nextProfile
   }
 
+  const refreshProfile = loadProfile
+
   async function loadSchools(): Promise<SchoolSummary[]> {
     const nextSchools = await getSchools()
     schools.value = nextSchools
@@ -59,6 +61,7 @@ export const useUserStore = defineStore('user', () => {
     initialized,
     currentSchool,
     loadProfile,
+    refreshProfile,
     loadSchools,
     initialize,
     selectSchool,

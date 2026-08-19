@@ -1,15 +1,16 @@
 {
   "pages": [
-    { "path": "pages/home/index", "style": { "navigationStyle": "custom" } },
-    { "path": "pages/stores/index", "style": { "navigationStyle": "custom" } },
-    { "path": "pages/eaten/index", "style": { "navigationStyle": "custom" } },
-    { "path": "pages/profile/index", "style": { "navigationStyle": "custom", "enableShareAppMessage": true } },
+    { "path": "pages/home/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
+    { "path": "pages/stores/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
+    { "path": "pages/stores/detail", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
+    { "path": "pages/eaten/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
+    { "path": "pages/profile/index", "style": { "navigationStyle": "custom", "enableShareAppMessage": true, "enablePullDownRefresh": true } },
     { "path": "pages/settings/index", "style": { "navigationStyle": "custom" } },
-    { "path": "pages/schools/index", "style": { "navigationStyle": "custom" } },
-    { "path": "pages/favorites/index", "style": { "navigationStyle": "custom" } },
-    { "path": "pages/reviews/index", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/schools/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
+    { "path": "pages/favorites/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
+    { "path": "pages/reviews/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
     { "path": "pages/reviews/create", "style": { "navigationStyle": "custom" } },
-    { "path": "pages/history/index", "style": { "navigationStyle": "custom" } }
+    { "path": "pages/history/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } }
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",

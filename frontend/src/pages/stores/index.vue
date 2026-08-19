@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import { searchStores } from '../../api/stores'
 import { ApiClientError } from '../../api/types'
 import PageHeader from '../../components/PageHeader.vue'
@@ -19,6 +19,8 @@ const keyword = ref('')
 const sort = ref<'all' | 'score' | 'favorite'>('all')
 const searchResults = ref<StoreItem[] | null>(null)
 const isSearching = ref(false)
+const loading = ref(true)
+const loadError = ref('')
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let searchSequence = 0
 
@@ -41,16 +43,25 @@ async function runSearch() {
   if (!query) {
     searchResults.value = null
     isSearching.value = false
+    loadError.value = ''
     return
   }
 
   isSearching.value = true
+  loadError.value = ''
   try {
-    const page = await searchStores(query, 1, 50)
-    if (sequence === searchSequence) searchResults.value = page.items
+    const firstPage = await searchStores(query, 1, 100)
+    const items = [...firstPage.items]
+    for (let page = 2; items.length < firstPage.total; page += 1) {
+      const nextPage = await searchStores(query, page, 100)
+      if (!nextPage.items.length) break
+      items.push(...nextPage.items)
+    }
+    if (sequence === searchSequence) searchResults.value = items
   } catch (error) {
     if (sequence === searchSequence) {
       searchResults.value = []
+      loadError.value = error instanceof ApiClientError ? error.message : '店铺搜索失败，请重试'
       uni.showToast({ title: error instanceof ApiClientError ? error.message : '店铺搜索失败', icon: 'none' })
     }
   } finally {
@@ -63,14 +74,23 @@ watch(keyword, () => {
   searchTimer = setTimeout(() => { void runSearch() }, 400)
 })
 
-onShow(async () => {
+async function loadStoresPage(refresh = false) {
+  loading.value = !refresh
+  loadError.value = ''
   try {
-    await appStore.initialize()
+    if (refresh) await appStore.refresh()
+    else await appStore.initialize()
     if (keyword.value.trim()) await runSearch()
   } catch (error) {
+    loadError.value = error instanceof ApiClientError ? error.message : '店铺列表加载失败，请重试'
     uni.showToast({ title: error instanceof ApiClientError ? error.message : '店铺列表加载失败', icon: 'none' })
+  } finally {
+    loading.value = false
+    if (refresh) uni.stopPullDownRefresh()
   }
-})
+}
+onShow(() => { void loadStoresPage() })
+onPullDownRefresh(() => { void loadStoresPage(true) })
 
 onUnmounted(() => {
   if (searchTimer) clearTimeout(searchTimer)
@@ -78,14 +98,7 @@ onUnmounted(() => {
 })
 
 function showStoreActions(store: StoreItem) {
-  appStore.recordVisit(store.id)
-  uni.showActionSheet({
-    itemList: [store.isFavorite ? '取消收藏' : '加入收藏', store.isEaten ? '标记为未吃过' : '标记为吃过'],
-    success: ({ tapIndex }) => {
-      if (tapIndex === 0) appStore.toggleFavorite(store.id)
-      if (tapIndex === 1) appStore.toggleEaten(store.id)
-    }
-  })
+  uni.navigateTo({ url: `/pages/stores/detail?storeId=${encodeURIComponent(store.id)}` })
 }
 </script>
 
@@ -103,8 +116,10 @@ function showStoreActions(store: StoreItem) {
         <view class="filter" :class="{ active: sort === 'score' }" @tap="sort = 'score'">评分高</view>
         <view class="filter" :class="{ active: sort === 'favorite' }" @tap="sort = 'favorite'">已收藏</view>
       </scroll-view>
-      <view v-if="filteredStores.length" class="store-list"><StoreRow v-for="store in filteredStores" :key="store.id" :store="store" @press="showStoreActions" /></view>
-      <EmptyState v-else :title="isSearching ? '正在搜索店铺' : '当前区域没有匹配店铺'" description="换个关键词或切换区域试试" />
+      <view v-if="loading" class="page-state">正在加载店铺…</view>
+      <view v-else-if="loadError" class="page-state"><text>{{ loadError }}</text><button class="retry-button" @tap="loadStoresPage()">重新加载</button></view>
+      <view v-else-if="filteredStores.length" class="store-list"><StoreRow v-for="store in filteredStores" :key="store.id" :store="store" @press="showStoreActions" /></view>
+      <EmptyState v-else :title="isSearching ? '没有找到相关店铺' : '当前学校暂无店铺'" description="换个关键词或切换区域试试" />
     </view>
     <!-- #ifndef MP-WEIXIN -->
     <StickerTabBar />
@@ -115,6 +130,7 @@ function showStoreActions(store: StoreItem) {
 <style scoped>
 .stores-page { background-color: transparent; background-image: linear-gradient(rgba(215,181,137,.18) 1rpx, transparent 1rpx), linear-gradient(90deg, rgba(215,181,137,.16) 1rpx, transparent 1rpx); background-size: 40rpx 40rpx; }
 .page-pad { padding: 8rpx 30rpx; }
+.page-state { padding: 80rpx 20rpx; color: var(--muted); text-align: center; }.retry-button { display: block; margin: 22rpx auto 0; padding: 0 26rpx; height: 68rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 25rpx; }
 .school-line { position: relative; display: flex; align-items: baseline; gap: 14rpx; width: fit-content; margin: 8rpx auto 20rpx; padding: 12rpx 34rpx; border: 1rpx solid #e1c9a7; background: #fff5dc; color: var(--brand-deep); font-size: 31rpx; font-weight: 900; box-shadow: var(--paper-shadow); transform: rotate(.6deg); }
 .school-line::before { position: absolute; top: -9rpx; left: -8rpx; width: 66rpx; height: 22rpx; background: rgba(235,190,132,.52); content: ''; transform: rotate(-14deg); }
 .area-name { color: var(--muted); font-size: 25rpx; font-weight: 400; }.leaf { margin-left: 8rpx; color: var(--brand); }

@@ -53,6 +53,17 @@ def test_review_rejects_blank_content() -> None:
         ReviewUpsertRequest(rating=5, content="   ")
 
 
+@pytest.mark.parametrize("rating", [0, 6])
+def test_review_rejects_rating_outside_one_to_five(rating: int) -> None:
+    with pytest.raises(ValidationError):
+        ReviewUpsertRequest(rating=rating, content="味道不错")
+
+
+def test_review_rejects_content_over_backend_limit() -> None:
+    with pytest.raises(ValidationError):
+        ReviewUpsertRequest(rating=5, content="好" * 501)
+
+
 @pytest.mark.asyncio
 async def test_store_image_must_come_from_configured_storage() -> None:
     class Storage:

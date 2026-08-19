@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import { ApiClientError } from '../../api/types'
 import type { SchoolSummary } from '../../api/users'
 import { useAppStore } from '../../stores/useAppStore'
@@ -11,6 +11,8 @@ const appStore = useAppStore()
 const userStore = useUserStore()
 const keyword = ref('')
 const selectingSchoolId = ref<string | null>(null)
+const loading = ref(true)
+const loadError = ref('')
 const schools = computed(() => userStore.schools.filter((school) => !keyword.value.trim() || school.name.includes(keyword.value.trim())))
 
 function schoolDescription(school: SchoolSummary): string {
@@ -32,13 +34,22 @@ async function selectSchool(id: string) {
   }
 }
 
-onShow(async () => {
+async function loadSchools(refresh = false) {
+  loading.value = !refresh
+  loadError.value = ''
   try {
     await userStore.initialize()
+    if (refresh) await userStore.loadSchools()
   } catch (error) {
+    loadError.value = error instanceof ApiClientError ? error.message : '学校列表加载失败，请重试'
     uni.showToast({ title: error instanceof ApiClientError ? error.message : '学校列表加载失败', icon: 'none' })
+  } finally {
+    loading.value = false
+    if (refresh) uni.stopPullDownRefresh()
   }
-})
+}
+onShow(() => { void loadSchools() })
+onPullDownRefresh(() => { void loadSchools(true) })
 </script>
 
 <template>
@@ -46,11 +57,14 @@ onShow(async () => {
     <PageHeader title="选择学校" back />
     <view class="page-pad">
       <view class="search-box"><text class="search-icon">⌕</text><input v-model="keyword" class="search-input" placeholder="搜索学校名称" placeholder-class="search-placeholder" /></view>
-      <text class="list-label">当前学校</text>
+      <view v-if="loading" class="page-state">正在加载学校…</view>
+      <view v-else-if="loadError" class="page-state"><text>{{ loadError }}</text><button class="retry-button" @tap="loadSchools()">重新加载</button></view>
+      <template v-else><text class="list-label">当前学校</text>
       <view v-for="school in schools" :key="school.id" class="school-option" :class="{ active: school.id === userStore.profile?.schoolId }" @tap="selectSchool(school.id)">
         <view class="school-copy"><text class="school-name">{{ school.name }}</text><text class="school-areas">{{ schoolDescription(school) }}</text></view>
         <text class="school-mark">{{ selectingSchoolId === school.id ? '…' : school.id === userStore.profile?.schoolId ? '⊙' : '›' }}</text>
       </view>
+      <view v-if="!schools.length" class="page-state">没有找到匹配学校</view></template>
     </view>
   </view>
 </template>
@@ -58,6 +72,7 @@ onShow(async () => {
 <style scoped>
 .schools-page { background: var(--page); }
 .page-pad { padding: 0 30rpx; }
+.page-state { padding: 80rpx 20rpx; color: var(--muted); text-align: center; }.retry-button { display: block; margin: 22rpx auto 0; padding: 0 26rpx; height: 68rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 25rpx; }
 .search-box { display: flex; align-items: center; height: 82rpx; padding: 0 22rpx; border: 1rpx solid var(--line); border-radius: 10rpx; background: #fff; }
 .search-icon { margin-right: 12rpx; color: var(--muted); font-size: 40rpx; }
 .search-input { flex: 1; height: 76rpx; font-size: 25rpx; }

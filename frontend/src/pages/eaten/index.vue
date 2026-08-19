@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import { ApiClientError } from '../../api/types'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
@@ -10,20 +10,57 @@ import StickerTabBar from '../../components/StickerTabBar.vue'
 import { useAppStore } from '../../stores/useAppStore'
 import type { StoreItem } from '../../types'
 import { storeImageUrl } from '../../utils/store'
+import FallbackImage from '../../components/FallbackImage.vue'
 
 const appStore = useAppStore()
 const mode = ref<'all' | 'eaten' | 'todo'>('all')
+const checkingStoreId = ref<string | null>(null)
+const loading = ref(true)
+const errorMessage = ref('')
 const list = computed(() => mode.value === 'eaten'
   ? appStore.activeSchoolEatenStores
   : mode.value === 'todo'
     ? appStore.activeSchoolStores.filter((store) => !store.isEaten)
     : appStore.activeSchoolStores)
 
-function toggle(store: StoreItem) { appStore.toggleEaten(store.id) }
-onShow(async () => {
-  try { await appStore.initialize() }
-  catch (error) { uni.showToast({ title: error instanceof ApiClientError ? error.message : '店铺数据加载失败', icon: 'none' }) }
-})
+function chooseCheckInImage(): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    uni.chooseImage({
+      count: 1,
+      sizeType: ['compressed'],
+      sourceType: ['album', 'camera'],
+      success: (result) => resolve(result.tempFilePaths[0] || null),
+      fail: (error) => {
+        if (error.errMsg?.toLowerCase().includes('cancel')) resolve(null)
+        else reject(new ApiClientError(error.errMsg || '选择图片失败', { code: 'IMAGE_PICK_FAILED', cause: error }))
+      },
+    })
+  })
+}
+
+async function toggle(store: StoreItem) {
+  if (store.isEaten || checkingStoreId.value) return
+  try {
+    const filePath = await chooseCheckInImage()
+    if (!filePath) return
+    checkingStoreId.value = store.id
+    await appStore.createCheckIn(store.id, filePath)
+    uni.showToast({ title: '打卡成功', icon: 'success' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof ApiClientError ? error.message : '打卡失败，请重试', icon: 'none' })
+  } finally {
+    checkingStoreId.value = null
+  }
+}
+async function loadEaten(refresh = false) {
+  loading.value = !refresh
+  errorMessage.value = ''
+  try { if (refresh) await appStore.refresh(); else await appStore.initialize() }
+  catch (error) { errorMessage.value = error instanceof ApiClientError ? error.message : '吃过列表加载失败，请重试'; uni.showToast({ title: errorMessage.value, icon: 'none' }) }
+  finally { loading.value = false; if (refresh) uni.stopPullDownRefresh() }
+}
+onShow(() => { void loadEaten() })
+onPullDownRefresh(() => { void loadEaten(true) })
 </script>
 
 <template>
@@ -39,14 +76,14 @@ onShow(async () => {
       </view>
       <view class="progress-copy"><text>{{ appStore.activeArea?.name }} 已完成探索</text><text>{{ appStore.activeSchoolEatenStores.length }} / {{ appStore.activeSchoolStores.length }}</text></view>
       <view class="progress-line"><view :style="{ width: `${appStore.activeSchoolStores.length ? (appStore.activeSchoolEatenStores.length / appStore.activeSchoolStores.length) * 100 : 0}%` }" /></view>
-      <view v-if="list.length" class="store-grid">
+      <view v-if="loading" class="page-state">正在加载吃过记录…</view><view v-else-if="errorMessage" class="page-state"><text>{{ errorMessage }}</text><button class="retry-button" @tap="loadEaten()">重新加载</button></view><view v-else-if="list.length" class="store-grid">
         <view v-for="store in list" :key="store.id" class="grid-card" :class="{ 'not-eaten': !store.isEaten }" @tap="toggle(store)">
-          <view class="image-wrap"><image class="grid-image" :src="storeImageUrl(store)" mode="aspectFill" /><text v-if="store.isEaten" class="check-mark">✓</text></view>
+          <view class="image-wrap"><FallbackImage class="grid-image" :src="storeImageUrl(store)" /><text v-if="store.isEaten" class="check-mark">✓</text></view>
           <text class="grid-name single-line">{{ store.name }}</text>
-          <text class="grid-address single-line">{{ store.address }}</text>
+          <text class="grid-address single-line">{{ store.isEaten ? store.address : checkingStoreId === store.id ? '上传中…' : '点击选择图片打卡' }}</text>
         </view>
       </view>
-      <EmptyState v-else title="还没有店铺记录" description="去首页抽一家，开始你的校园足迹" />
+      <EmptyState v-else title="还没有打卡过店铺" description="去首页抽一家，开始你的校园足迹" />
     </view>
     <!-- #ifndef MP-WEIXIN -->
     <StickerTabBar />
@@ -57,6 +94,7 @@ onShow(async () => {
 <style scoped>
 .eaten-page { background: transparent; }
 .page-pad { padding: 0 30rpx; }
+.page-state { padding: 80rpx 20rpx; color: var(--muted); text-align: center; }.retry-button { display: block; margin: 22rpx auto 0; padding: 0 26rpx; height: 68rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 25rpx; }
 .school-line { width: fit-content; margin: 6rpx auto 0; padding: 10rpx 24rpx; border: 1rpx solid #dcc4a4; background: #fff4d9; color: var(--brand-deep); font-size: 29rpx; font-weight: 900; box-shadow: var(--paper-shadow); transform: rotate(-.7deg); }
 .school-line text { margin-left: 6rpx; font-size: 28rpx; }
 .area-tabs { width: 100%; margin: 20rpx 0; white-space: nowrap; }

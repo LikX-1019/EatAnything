@@ -24,6 +24,14 @@ export interface StoreSummary {
   isEaten: boolean
 }
 
+export interface StoreDetail extends StoreSummary {
+  description?: string | null
+  city?: string | null
+  district?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface GetStoresParams {
   keyword?: string
   page?: number
@@ -60,4 +68,12 @@ export function randomStore(excludeStoreId?: string): Promise<RandomStoreData> {
     '/stores/random',
     excludeStoreId ? { excludeStoreId } : {},
   )
+}
+
+export function getStoreDetail(storeId: string): Promise<StoreDetail> {
+  return get<StoreDetail>(`/stores/${encodeURIComponent(storeId)}`)
+}
+
+export function recordStoreVisit(storeId: string): Promise<{ id: string; action: string; storeId: string }> {
+  return post<{ id: string; action: string; storeId: string }>(`/stores/${encodeURIComponent(storeId)}/visits`)
 }

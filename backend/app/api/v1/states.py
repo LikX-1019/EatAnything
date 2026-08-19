@@ -17,7 +17,16 @@ eaten_router = APIRouter(prefix="/me/eaten", tags=["Eaten"])
 
 @favorite_router.get("", response_model=ApiResponse[PageData[StoreSummary]])
 async def list_favorites(request: Request, user: UserDep, session: SessionDep, storage: MinioStorage = Depends(get_minio), keyword: str | None = Query(default=None, max_length=100), page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=100)):
-    items, total = await user_store_page(session, storage, user.id, keyword=keyword, page=page, page_size=page_size, mode="favorites")
+    items, total = await user_store_page(
+        session,
+        storage,
+        user.id,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        mode="favorites",
+        school_id=user.school_id,
+    )
     return response(request, {"items": items, "page": page, "page_size": page_size, "total": total})
 
 
@@ -43,7 +52,16 @@ async def remove_favorite(storeId: str, request: Request, user: UserDep, session
 
 @eaten_router.get("", response_model=ApiResponse[PageData[StoreSummary]])
 async def list_eaten(request: Request, user: UserDep, session: SessionDep, storage: MinioStorage = Depends(get_minio), keyword: str | None = Query(default=None, max_length=100), page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=100)):
-    items, total = await user_store_page(session, storage, user.id, keyword=keyword, page=page, page_size=page_size, mode="eaten")
+    items, total = await user_store_page(
+        session,
+        storage,
+        user.id,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        mode="eaten",
+        school_id=user.school_id,
+    )
     return response(request, {"items": items, "page": page, "page_size": page_size, "total": total})
 
 
