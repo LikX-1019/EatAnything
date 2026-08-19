@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { searchStores } from '../../api/stores'
+import { ApiClientError } from '../../api/types'
 import PageHeader from '../../components/PageHeader.vue'
 import StoreRow from '../../components/StoreRow.vue'
 import EmptyState from '../../components/EmptyState.vue'
@@ -7,23 +10,77 @@ import EmptyState from '../../components/EmptyState.vue'
 import StickerTabBar from '../../components/StickerTabBar.vue'
 // #endif
 import { useAppStore } from '../../stores/useAppStore'
+import { useUserStore } from '../../stores/useUserStore'
 import type { StoreItem } from '../../types'
 
 const appStore = useAppStore()
+const userStore = useUserStore()
 const keyword = ref('')
 const sort = ref<'all' | 'score' | 'favorite'>('all')
+const searchResults = ref<StoreItem[] | null>(null)
+const isSearching = ref(false)
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+let searchSequence = 0
+
+const scopedStores = computed(() => {
+  const schoolId = userStore.profile?.schoolId
+  const area = appStore.activeArea?.name
+  const source = searchResults.value ?? appStore.activeSchoolStores
+  return source.filter((store) => store.schoolId === schoolId && (!area || store.area.trim() === area))
+})
 const filteredStores = computed(() => {
-  const query = keyword.value.trim().toLowerCase()
-  let list = appStore.activeAreaStores.filter((store) => !query || [store.name, store.category, store.address].some((field) => field.toLowerCase().includes(query)))
-  if (sort.value === 'score') list = [...list].sort((a, b) => b.score - a.score)
-  if (sort.value === 'favorite') list = list.filter((store) => store.favorite)
+  let list = scopedStores.value
+  if (sort.value === 'score') list = [...list].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+  if (sort.value === 'favorite') list = list.filter((store) => store.isFavorite)
   return list
+})
+
+async function runSearch() {
+  const query = keyword.value.trim()
+  const sequence = ++searchSequence
+  if (!query) {
+    searchResults.value = null
+    isSearching.value = false
+    return
+  }
+
+  isSearching.value = true
+  try {
+    const page = await searchStores(query, 1, 50)
+    if (sequence === searchSequence) searchResults.value = page.items
+  } catch (error) {
+    if (sequence === searchSequence) {
+      searchResults.value = []
+      uni.showToast({ title: error instanceof ApiClientError ? error.message : '店铺搜索失败', icon: 'none' })
+    }
+  } finally {
+    if (sequence === searchSequence) isSearching.value = false
+  }
+}
+
+watch(keyword, () => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { void runSearch() }, 400)
+})
+
+onShow(async () => {
+  try {
+    await appStore.initialize()
+    if (keyword.value.trim()) await runSearch()
+  } catch (error) {
+    uni.showToast({ title: error instanceof ApiClientError ? error.message : '店铺列表加载失败', icon: 'none' })
+  }
+})
+
+onUnmounted(() => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchSequence += 1
 })
 
 function showStoreActions(store: StoreItem) {
   appStore.recordVisit(store.id)
   uni.showActionSheet({
-    itemList: [store.favorite ? '取消收藏' : '加入收藏', store.eaten ? '标记为未吃过' : '标记为吃过'],
+    itemList: [store.isFavorite ? '取消收藏' : '加入收藏', store.isEaten ? '标记为未吃过' : '标记为吃过'],
     success: ({ tapIndex }) => {
       if (tapIndex === 0) appStore.toggleFavorite(store.id)
       if (tapIndex === 1) appStore.toggleEaten(store.id)
@@ -40,14 +97,14 @@ function showStoreActions(store: StoreItem) {
       <scroll-view scroll-x class="area-tabs" :show-scrollbar="false">
         <view v-for="area in appStore.activeAreas" :key="area.id" class="area-tab" :class="{ active: area.id === appStore.selectedAreaId }" @tap="appStore.selectArea(area.id)">{{ area.name }}</view>
       </scroll-view>
-      <view class="search-box"><text class="search-icon">⌕</text><input v-model="keyword" class="search-input" placeholder="搜索店铺、分类或地址" placeholder-class="search-placeholder" /><text v-if="keyword" class="clear-search" @tap="keyword = ''">×</text></view>
+      <view class="search-box"><text class="search-icon">⌕</text><input v-model="keyword" class="search-input" placeholder="搜索店铺或地址" placeholder-class="search-placeholder" /><text v-if="keyword" class="clear-search" @tap="keyword = ''">×</text></view>
       <scroll-view scroll-x class="filters" :show-scrollbar="false">
-        <view class="filter" :class="{ active: sort === 'all' }" @tap="sort = 'all'">全部 {{ appStore.activeAreaStores.length }}</view>
+        <view class="filter" :class="{ active: sort === 'all' }" @tap="sort = 'all'">全部 {{ scopedStores.length }}</view>
         <view class="filter" :class="{ active: sort === 'score' }" @tap="sort = 'score'">评分高</view>
         <view class="filter" :class="{ active: sort === 'favorite' }" @tap="sort = 'favorite'">已收藏</view>
       </scroll-view>
       <view v-if="filteredStores.length" class="store-list"><StoreRow v-for="store in filteredStores" :key="store.id" :store="store" @press="showStoreActions" /></view>
-      <EmptyState v-else title="当前区域没有匹配店铺" description="换个关键词或切换区域试试" />
+      <EmptyState v-else :title="isSearching ? '正在搜索店铺' : '当前区域没有匹配店铺'" description="换个关键词或切换区域试试" />
     </view>
     <!-- #ifndef MP-WEIXIN -->
     <StickerTabBar />

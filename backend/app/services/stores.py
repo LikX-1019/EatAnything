@@ -85,7 +85,17 @@ def store_detail(store: Store, storage: MinioStorage, stats: tuple[float | None,
     return result
 
 
-async def user_store_page(session: AsyncSession, storage: MinioStorage, user_id: int, *, keyword: str | None, page: int, page_size: int, mode: str = "all") -> tuple[list[dict], int]:
+async def user_store_page(
+    session: AsyncSession,
+    storage: MinioStorage,
+    user_id: int,
+    *,
+    keyword: str | None,
+    page: int,
+    page_size: int,
+    mode: str = "all",
+    school_id: int | None = None,
+) -> tuple[list[dict], int]:
     if mode == "favorites" or mode == "eaten":
         from app.models import CheckIn, UserFavorite
         from sqlalchemy import or_
@@ -103,8 +113,18 @@ async def user_store_page(session: AsyncSession, storage: MinioStorage, user_id:
         total = int((await session.scalar(select(__import__("sqlalchemy").func.count()).select_from(query.subquery()))) or 0)
         stores = list((await session.scalars(query.order_by(Store.updated_at.desc()).offset((page - 1) * page_size).limit(page_size))).all())
     else:
-        total = await store_repo.count_stores(session, active_only=True, keyword=keyword)
-        stores = await store_repo.list_stores(session, active_only=True, keyword=keyword, status=None, page=page, page_size=page_size)
+        if school_id is None:
+            return [], 0
+        total = await store_repo.count_stores(session, active_only=True, keyword=keyword, school_id=school_id)
+        stores = await store_repo.list_stores(
+            session,
+            active_only=True,
+            keyword=keyword,
+            status=None,
+            page=page,
+            page_size=page_size,
+            school_id=school_id,
+        )
     ids = [store.id for store in stores]
     stats = await store_repo.stats_for_stores(session, ids)
     states = await states_for_stores(session, user_id, ids)
@@ -120,8 +140,18 @@ async def get_user_store(session: AsyncSession, storage: MinioStorage, user_id: 
     return store_detail(store, storage, stats.get(store.id, (None, 0)), state.get(store.id))
 
 
-async def random_user_store(session: AsyncSession, storage: MinioStorage, user_id: int, exclude_store_id: int | None) -> tuple[dict, str]:
-    store_id = await store_repo.random_store_id(session, exclude_store_id)
+async def random_user_store(
+    session: AsyncSession,
+    storage: MinioStorage,
+    user_id: int,
+    exclude_store_id: int | None,
+    school_id: int | None,
+) -> tuple[dict, str]:
+    store_id = (
+        await store_repo.random_store_id(session, exclude_store_id, school_id=school_id)
+        if school_id is not None
+        else None
+    )
     if store_id is None:
         raise ApiError(404, "STORE_POOL_EMPTY", "暂无可选店铺")
     store = await store_repo.get_store(session, store_id, active_only=True)

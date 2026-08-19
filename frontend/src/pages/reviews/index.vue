@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { ApiClientError } from '../../api/types'
 import EmptyState from '../../components/EmptyState.vue'
 import PageHeader from '../../components/PageHeader.vue'
 import { useAppStore } from '../../stores/useAppStore'
 const appStore = useAppStore()
+onShow(async () => {
+  try { await appStore.initialize() }
+  catch (error) { uni.showToast({ title: error instanceof ApiClientError ? error.message : '店铺数据加载失败', icon: 'none' }) }
+})
 function writeReview() { uni.navigateTo({ url: '/pages/reviews/create' }) }
 </script>
 

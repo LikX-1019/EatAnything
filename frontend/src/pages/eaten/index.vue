@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { ApiClientError } from '../../api/types'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 // #ifndef MP-WEIXIN
@@ -7,16 +9,21 @@ import StickerTabBar from '../../components/StickerTabBar.vue'
 // #endif
 import { useAppStore } from '../../stores/useAppStore'
 import type { StoreItem } from '../../types'
+import { storeImageUrl } from '../../utils/store'
 
 const appStore = useAppStore()
 const mode = ref<'all' | 'eaten' | 'todo'>('all')
 const list = computed(() => mode.value === 'eaten'
   ? appStore.activeSchoolEatenStores
   : mode.value === 'todo'
-    ? appStore.activeSchoolStores.filter((store) => !store.eaten)
+    ? appStore.activeSchoolStores.filter((store) => !store.isEaten)
     : appStore.activeSchoolStores)
 
 function toggle(store: StoreItem) { appStore.toggleEaten(store.id) }
+onShow(async () => {
+  try { await appStore.initialize() }
+  catch (error) { uni.showToast({ title: error instanceof ApiClientError ? error.message : '店铺数据加载失败', icon: 'none' }) }
+})
 </script>
 
 <template>
@@ -33,8 +40,8 @@ function toggle(store: StoreItem) { appStore.toggleEaten(store.id) }
       <view class="progress-copy"><text>{{ appStore.activeArea?.name }} 已完成探索</text><text>{{ appStore.activeSchoolEatenStores.length }} / {{ appStore.activeSchoolStores.length }}</text></view>
       <view class="progress-line"><view :style="{ width: `${appStore.activeSchoolStores.length ? (appStore.activeSchoolEatenStores.length / appStore.activeSchoolStores.length) * 100 : 0}%` }" /></view>
       <view v-if="list.length" class="store-grid">
-        <view v-for="store in list" :key="store.id" class="grid-card" :class="{ 'not-eaten': !store.eaten }" @tap="toggle(store)">
-          <view class="image-wrap"><image class="grid-image" :src="store.image" mode="aspectFill" /><text v-if="store.eaten" class="check-mark">✓</text></view>
+        <view v-for="store in list" :key="store.id" class="grid-card" :class="{ 'not-eaten': !store.isEaten }" @tap="toggle(store)">
+          <view class="image-wrap"><image class="grid-image" :src="storeImageUrl(store)" mode="aspectFill" /><text v-if="store.isEaten" class="check-mark">✓</text></view>
           <text class="grid-name single-line">{{ store.name }}</text>
           <text class="grid-address single-line">{{ store.address }}</text>
         </view>

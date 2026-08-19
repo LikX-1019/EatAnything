@@ -1,17 +1,44 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { ApiClientError } from '../../api/types'
+import type { SchoolSummary } from '../../api/users'
 import { useAppStore } from '../../stores/useAppStore'
+import { useUserStore } from '../../stores/useUserStore'
 import PageHeader from '../../components/PageHeader.vue'
 
 const appStore = useAppStore()
+const userStore = useUserStore()
 const keyword = ref('')
-const schools = computed(() => appStore.schools.filter((school) => !keyword.value.trim() || school.name.includes(keyword.value.trim())))
+const selectingSchoolId = ref<string | null>(null)
+const schools = computed(() => userStore.schools.filter((school) => !keyword.value.trim() || school.name.includes(keyword.value.trim())))
 
-function selectSchool(id: string) {
-  appStore.selectSchool(id)
-  uni.navigateBack()
+function schoolDescription(school: SchoolSummary): string {
+  const location = [school.city, school.district].filter(Boolean).join(' · ')
+  return location || school.address || '暂无地址信息'
 }
 
+async function selectSchool(id: string) {
+  if (selectingSchoolId.value) return
+  selectingSchoolId.value = id
+  try {
+    await userStore.selectSchool(id)
+    await appStore.reloadForSchool()
+    uni.navigateBack()
+  } catch (error) {
+    uni.showToast({ title: error instanceof ApiClientError ? error.message : '学校切换失败', icon: 'none' })
+  } finally {
+    selectingSchoolId.value = null
+  }
+}
+
+onShow(async () => {
+  try {
+    await userStore.initialize()
+  } catch (error) {
+    uni.showToast({ title: error instanceof ApiClientError ? error.message : '学校列表加载失败', icon: 'none' })
+  }
+})
 </script>
 
 <template>
@@ -20,9 +47,9 @@ function selectSchool(id: string) {
     <view class="page-pad">
       <view class="search-box"><text class="search-icon">⌕</text><input v-model="keyword" class="search-input" placeholder="搜索学校名称" placeholder-class="search-placeholder" /></view>
       <text class="list-label">当前学校</text>
-      <view v-for="school in schools" :key="school.id" class="school-option" :class="{ active: school.id === appStore.selectedSchoolId }" @tap="selectSchool(school.id)">
-        <view class="school-copy"><text class="school-name">{{ school.name }}</text><text class="school-areas">{{ school.areas.map((area) => area.name).join(' · ') }}</text></view>
-        <text class="school-mark">{{ school.id === appStore.selectedSchoolId ? '⊙' : '›' }}</text>
+      <view v-for="school in schools" :key="school.id" class="school-option" :class="{ active: school.id === userStore.profile?.schoolId }" @tap="selectSchool(school.id)">
+        <view class="school-copy"><text class="school-name">{{ school.name }}</text><text class="school-areas">{{ schoolDescription(school) }}</text></view>
+        <text class="school-mark">{{ selectingSchoolId === school.id ? '…' : school.id === userStore.profile?.schoolId ? '⊙' : '›' }}</text>
       </view>
     </view>
   </view>

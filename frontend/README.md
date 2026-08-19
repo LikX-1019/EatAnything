@@ -1,6 +1,6 @@
 # 今天吃什么
 
-基于 uni-app、Vue 3、Vite 和 Pinia 的微信小程序前端。现有业务页面仍使用 Mock 数据；API 请求与用户认证已接入 FastAPI 后端。
+基于 uni-app、Vue 3、Vite 和 Pinia 的微信小程序前端。用户、学校、店铺列表、搜索和随机抽取已接入 FastAPI 后端；评价、历史等后续模块暂时保留 Mock 数据。
 
 ## 运行
 

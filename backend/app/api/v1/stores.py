@@ -25,14 +25,22 @@ async def list_stores(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ):
-    items, total = await user_store_page(session, storage, user.id, keyword=keyword, page=page, page_size=page_size)
+    items, total = await user_store_page(
+        session,
+        storage,
+        user.id,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        school_id=user.school_id,
+    )
     return response(request, {"items": items, "page": page, "page_size": page_size, "total": total})
 
 
 @router.post("/random", response_model=ApiResponse[dict])
 async def random_store(payload: RandomStoreRequest | None, request: Request, user: UserDep, session: SessionDep, storage: MinioStorage = Depends(get_minio)):
     exclude_id = parse_store_id(payload.exclude_store_id) if payload and payload.exclude_store_id else None
-    store, history_id = await random_user_store(session, storage, user.id, exclude_id)
+    store, history_id = await random_user_store(session, storage, user.id, exclude_id, user.school_id)
     return response(request, {"store": store, "history_id": history_id})
 
 

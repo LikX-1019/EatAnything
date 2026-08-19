@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { StoreItem } from '../types'
+import { storeImageUrl, storeScoreLabel } from '../utils/store'
 defineProps<{ store: StoreItem }>()
 defineEmits<{ (event: 'press', store: StoreItem): void }>()
 </script>
@@ -7,16 +8,16 @@ defineEmits<{ (event: 'press', store: StoreItem): void }>()
 <template>
   <view class="store-row" hover-class="tap-active" @tap="$emit('press', store)">
     <text class="row-tape" />
-    <image class="store-image" :src="store.image" mode="aspectFill" />
+    <image class="store-image" :src="storeImageUrl(store)" mode="aspectFill" />
     <view class="store-info">
       <view class="name-line">
         <text class="store-name single-line">{{ store.name }}</text>
-        <text v-if="store.favorite" class="favorite">♥</text>
+        <text v-if="store.isFavorite" class="favorite">♥</text>
       </view>
       <text class="category">{{ store.category }}</text>
       <view class="meta-line">
         <text class="address single-line">{{ store.address }}</text>
-        <text class="score">★ {{ store.score.toFixed(1) }}</text>
+        <text class="score">★ {{ storeScoreLabel(store) }}</text>
       </view>
     </view>
   </view>

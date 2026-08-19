@@ -1,14 +1,26 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { ApiClientError } from '../../api/types'
 import { useAppStore } from '../../stores/useAppStore'
 import PageHeader from '../../components/PageHeader.vue'
+import { storeImageUrl } from '../../utils/store'
 
 const appStore = useAppStore()
-const storeId = ref(appStore.activeAreaStores[0]?.id || 0)
+const storeId = ref(appStore.activeAreaStores[0]?.id || '')
 const rating = ref(5)
 const content = ref('')
 const selectedStore = computed(() => appStore.findStore(storeId.value))
 const selectableStores = computed(() => appStore.activeSchoolStores)
+
+onShow(async () => {
+  try {
+    await appStore.initialize()
+    if (!storeId.value) storeId.value = appStore.activeAreaStores[0]?.id || appStore.activeSchoolStores[0]?.id || ''
+  } catch (error) {
+    uni.showToast({ title: error instanceof ApiClientError ? error.message : '店铺数据加载失败', icon: 'none' })
+  }
+})
 
 function submit() {
   if (!storeId.value) return uni.showToast({ title: '请先选择店铺', icon: 'none' })
@@ -26,7 +38,7 @@ function submit() {
       <text class="label">评价哪家店？</text>
       <scroll-view scroll-x class="store-picker" :show-scrollbar="false">
         <view v-for="store in selectableStores" :key="store.id" class="store-chip" :class="{ active: store.id === storeId }" @tap="storeId = store.id">
-          <image :src="store.image" mode="aspectFill" /><text>{{ store.name }}</text>
+          <image :src="storeImageUrl(store)" mode="aspectFill" /><text>{{ store.name }}</text>
         </view>
       </scroll-view>
       <text class="label rating-label">打个分</text>

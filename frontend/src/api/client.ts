@@ -1,4 +1,3 @@
-import { forceRelogin } from '@/auth/login'
 import { clearAccessToken, getAccessToken } from '@/auth/token'
 import { env } from '@/config/env'
 import { ApiClientError, type ApiErrorDetail, type ApiResponse } from './types'
@@ -17,6 +16,13 @@ export interface RequestOptions<TData = unknown> {
 }
 
 type RecordValue = Record<string, unknown>
+type AuthRefreshHandler = (staleToken: string | null) => Promise<void>
+
+let authRefreshHandler: AuthRefreshHandler | null = null
+
+export function setAuthRefreshHandler(handler: AuthRefreshHandler): void {
+  authRefreshHandler = handler
+}
 
 function isRecord(value: unknown): value is RecordValue {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -148,7 +154,14 @@ async function executeRequest<T, TData>(options: RequestOptions<TData>, retryCou
     && retryCount === 0
 
   if (canRefreshAuth) {
-    await forceRelogin(tokenUsed)
+    if (!authRefreshHandler) {
+      clearAccessToken()
+      throw new ApiClientError('Authentication refresh is not configured', {
+        status: 401,
+        code: 'AUTH_REFRESH_UNAVAILABLE',
+      })
+    }
+    await authRefreshHandler(tokenUsed)
     return executeRequest<T, TData>(options, retryCount + 1)
   }
 
@@ -168,8 +181,12 @@ export function request<T, TData = unknown>(options: RequestOptions<TData>): Pro
 
 type RequestOverrides<TData> = Omit<RequestOptions<TData>, 'url' | 'method' | 'data'>
 
-export function get<T>(url: string, options: RequestOverrides<never> = {}): Promise<T> {
-  return request<T>({ ...options, url, method: 'GET' })
+export function get<T, TQuery = undefined>(
+  url: string,
+  query?: TQuery,
+  options: RequestOverrides<TQuery> = {},
+): Promise<T> {
+  return request<T, TQuery>({ ...options, url, method: 'GET', data: query })
 }
 
 export function post<T, TData = unknown>(url: string, data?: TData, options: RequestOverrides<TData> = {}): Promise<T> {

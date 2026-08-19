@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { ApiClientError } from '../../api/types'
 import EmptyState from '../../components/EmptyState.vue'
 import StoreRow from '../../components/StoreRow.vue'
 import PageHeader from '../../components/PageHeader.vue'
@@ -6,9 +8,13 @@ import { useAppStore } from '../../stores/useAppStore'
 import type { StoreItem } from '../../types'
 
 const appStore = useAppStore()
+onShow(async () => {
+  try { await appStore.initialize() }
+  catch (error) { uni.showToast({ title: error instanceof ApiClientError ? error.message : '店铺数据加载失败', icon: 'none' }) }
+})
 function manage(store: StoreItem) {
   uni.showActionSheet({
-    itemList: ['取消收藏', store.eaten ? '标记为未吃过' : '标记为吃过'],
+    itemList: ['取消收藏', store.isEaten ? '标记为未吃过' : '标记为吃过'],
     success: ({ tapIndex }) => {
       if (tapIndex === 0) appStore.toggleFavorite(store.id)
       if (tapIndex === 1) appStore.toggleEaten(store.id)

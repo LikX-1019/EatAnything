@@ -1,35 +1,65 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { feedComments } from '../../data/mock'
+import { ApiClientError } from '../../api/types'
 import PageHeader from '../../components/PageHeader.vue'
 // #ifndef MP-WEIXIN
 import StickerTabBar from '../../components/StickerTabBar.vue'
 // #endif
 import { useAppStore } from '../../stores/useAppStore'
+import { useUserStore } from '../../stores/useUserStore'
+import { storeImageUrl, storeScoreLabel } from '../../utils/store'
 
 const appStore = useAppStore()
+const userStore = useUserStore()
 const isDrawing = ref(false)
 const rollingName = ref('准备好了吗？')
 let shuffleTimer: ReturnType<typeof setInterval> | null = null
 let finishTimer: ReturnType<typeof setTimeout> | null = null
-const visibleComments = computed(() => feedComments.map((comment) => ({ comment, store: appStore.findStore(comment.storeId) })).filter(({ store }) => store?.schoolId === appStore.selectedSchoolId))
+const visibleComments = computed(() => feedComments
+  .map((comment) => ({ comment, store: appStore.findStore(comment.storeId) }))
+  .filter(({ store }) => store?.schoolId === userStore.profile?.schoolId))
+
+function showError(error: unknown, fallback: string) {
+  uni.showToast({ title: error instanceof ApiClientError ? error.message : fallback, icon: 'none' })
+}
+
+onShow(async () => {
+  try {
+    await appStore.initialize()
+  } catch (error) {
+    showError(error, '核心数据加载失败')
+  }
+})
 
 function chooseSchool() { uni.navigateTo({ url: '/pages/schools/index' }) }
 function chooseArea(id: string) { appStore.selectArea(id) }
-function drawStore() {
+async function drawStore() {
   if (isDrawing.value || appStore.isPickLocked) return
-  const pool = appStore.activeAreaStores
-  if (!pool.length) return uni.showToast({ title: '当前区域暂无店铺', icon: 'none' })
+  if (!userStore.profile?.schoolId) return uni.showToast({ title: '请先选择学校', icon: 'none' })
+  const pool = appStore.activeSchoolStores
+  if (!pool.length) return uni.showToast({ title: '当前学校暂无店铺', icon: 'none' })
   isDrawing.value = true
   let cursor = 0
   shuffleTimer = setInterval(() => { rollingName.value = pool[cursor++ % pool.length].name }, 90)
-  finishTimer = setTimeout(() => {
+  const animation = new Promise<void>((resolve) => {
+    finishTimer = setTimeout(resolve, 720)
+  })
+  try {
+    const [next] = await Promise.all([appStore.drawRandomStore(), animation])
+    rollingName.value = next.name
+  } catch (error) {
+    showError(error, '随机抽取失败')
+  } finally {
     if (shuffleTimer) clearInterval(shuffleTimer)
-    rollingName.value = appStore.drawRandomStore()?.name || '当前区域暂无店铺'
+    if (finishTimer) clearTimeout(finishTimer)
+    shuffleTimer = null
+    finishTimer = null
     isDrawing.value = false
-  }, 720)
+  }
 }
-function replaceCurrentPick() { appStore.continueAfterCheckIn(); drawStore() }
+function replaceCurrentPick() { void drawStore() }
 function togglePickLock() {
   if (appStore.isPickLocked) {
     if (appStore.unlockCurrentPick()) {
@@ -55,10 +85,11 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
     <PageHeader title="今天吃什么" weather />
     <view class="content-width home-content">
       <view class="scope-card">
-        <button class="school-button" hover-class="tap-active" @tap="chooseSchool">📌 {{ appStore.activeSchool?.name }} <text class="chevron">⌄</text></button>
+        <button class="school-button" hover-class="tap-active" @tap="chooseSchool">📌 {{ userStore.profile?.school?.name || '选择学校' }} <text class="chevron">⌄</text></button>
         <scroll-view scroll-x class="area-tabs" :show-scrollbar="false">
           <view v-for="area in appStore.activeAreas" :key="area.id" class="area-tab" :class="{ active: area.id === appStore.selectedAreaId }" @tap="chooseArea(area.id)">{{ area.name }}</view>
         </scroll-view>
+        <text class="random-scope-note">区域用于浏览筛选；随机结果由后端店铺池生成</text>
       </view>
       <view class="lucky-stage">
         <text class="corner-flower">✿</text><text class="corner-star">✦</text>
@@ -66,9 +97,9 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
           <view class="lucky-paper">
             <text class="sun-mark">☀</text><text class="lucky-label">幸运抽签</text>
             <template v-if="appStore.currentPick && !isDrawing">
-              <image class="picked-image" :src="appStore.currentPick.image" mode="aspectFill" />
+              <image class="picked-image" :src="storeImageUrl(appStore.currentPick)" mode="aspectFill" />
               <text class="picked-name">{{ appStore.currentPick.name }}</text>
-              <text class="picked-meta">{{ appStore.currentPick.category }} · ★ {{ appStore.currentPick.score.toFixed(1) }}</text>
+              <text class="picked-meta">{{ appStore.currentPick.category }} · ★ {{ storeScoreLabel(appStore.currentPick) }}</text>
               <text class="picked-address">⌖ {{ appStore.currentPick.address }}</text>
             </template>
             <template v-else>
@@ -81,7 +112,7 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
         <view class="string" />
       </view>
       <view v-if="appStore.currentPick && !isDrawing" class="result-actions">
-        <button class="favorite-button" @tap="toggleFavorite">{{ appStore.currentPick.favorite ? '♥ 已收藏' : '♡ 收藏' }}</button>
+        <button class="favorite-button" @tap="toggleFavorite">{{ appStore.currentPick.isFavorite ? '♥ 已收藏' : '♡ 收藏' }}</button>
         <button class="lock-button" :class="{ locked: appStore.isPickLocked }" @tap="togglePickLock">{{ appStore.isPickLocked ? '↶ 取消锁定' : '✓ 就吃这家！' }}</button>
       </view>
       <view v-if="appStore.isPickLocked" class="check-in-row"><text>这顿就这么定啦，到了记得打卡～</text><button @tap="checkIn">到店打卡</button></view>
@@ -103,6 +134,7 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
 .home-page { background: transparent; }
 .home-content { position: relative; padding: 18rpx 30rpx 24rpx; overflow: hidden; }
 .scope-card { margin-top: 12rpx; padding: 14rpx 16rpx; border: 1rpx dashed #d5b990; border-radius: 12rpx; background: rgba(255,250,236,.62); }.school-button { display: inline-flex; align-items: center; height: 48rpx; padding: 0; color: var(--brand-deep); font-size: 27rpx; font-weight: 800; }.chevron { margin-left: 4rpx; }.area-tabs { width: 100%; margin-top: 10rpx; white-space: nowrap; }.area-tab { display: inline-flex; align-items: center; height: 56rpx; margin-right: 10rpx; padding: 0 22rpx; border: 1rpx solid #dfc8a5; border-radius: 7rpx 12rpx 8rpx 11rpx; background: #fffaf0; color: #806b56; font-size: 25rpx; }.area-tab.active { border-color: #e38b78; background: #f8d8ce; color: #a85043; font-weight: 800; box-shadow: 0 3rpx 0 #dca092; }
+.random-scope-note { display: block; margin-top: 8rpx; color: var(--muted); font-size: 20rpx; }
 .lucky-stage { position: relative; min-height: 515rpx; margin: 20rpx 16rpx 0; padding: 25rpx 30rpx 68rpx; border: 3rpx solid rgba(220,145,125,.52); border-radius: 20rpx; background: rgba(244,180,165,.32); box-shadow: inset 0 0 0 12rpx rgba(255,255,255,.23); }.lucky-stage::before { position: absolute; top: 12rpx; right: 16rpx; bottom: 12rpx; left: 16rpx; border: 2rpx dashed rgba(195,115,95,.35); border-radius: 16rpx; content: ''; }.corner-flower, .corner-star { position: absolute; z-index: 3; color: var(--brand); font-size: 35rpx; }.corner-flower { top: 16rpx; left: 18rpx; }.corner-star { top: 20rpx; right: 22rpx; color: var(--amber); }
 .lucky-frame { position: relative; z-index: 2; padding: 16rpx; background: rgba(255,247,226,.75); box-shadow: var(--paper-shadow); transform: rotate(-1deg); }.lucky-paper { position: relative; display: flex; align-items: center; flex-direction: column; justify-content: center; min-height: 355rpx; padding: 22rpx 20rpx; border: 1rpx solid #d8bd99; background: #fffaf0; box-shadow: inset 0 0 22rpx rgba(157,111,66,.06); }.lucky-paper::before, .lucky-paper::after { position: absolute; top: -15rpx; width: 86rpx; height: 30rpx; background: rgba(239,200,145,.5); content: ''; }.lucky-paper::before { left: -26rpx; transform: rotate(-25deg); }.lucky-paper::after { right: -24rpx; transform: rotate(24deg); }.sun-mark { color: var(--amber); font-size: 32rpx; }.lucky-label { margin-top: 3rpx; font-size: 31rpx; font-weight: 900; letter-spacing: 4rpx; }.mystery { max-width: 100%; margin-top: 34rpx; overflow: hidden; font-size: 64rpx; font-weight: 900; letter-spacing: 10rpx; text-overflow: ellipsis; white-space: nowrap; }.pull-copy { margin-top: 20rpx; color: #71523b; font-size: 27rpx; }
 .picked-image { width: 286rpx; height: 190rpx; margin-top: 16rpx; padding: 6rpx; border: 1rpx solid #dec8a8; background: #fff; box-shadow: 0 6rpx 10rpx rgba(94,67,38,.18); transform: rotate(1.5deg); }.picked-name { margin-top: 15rpx; font-size: 36rpx; font-weight: 900; }.picked-meta, .picked-address { margin-top: 7rpx; color: var(--muted); font-size: 24rpx; }

@@ -1,12 +1,19 @@
 <script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { ApiClientError } from '../../api/types'
 import EmptyState from '../../components/EmptyState.vue'
 import { useAppStore } from '../../stores/useAppStore'
 import PageHeader from '../../components/PageHeader.vue'
+import { storeImageUrl } from '../../utils/store'
 const appStore = useAppStore()
+onShow(async () => {
+  try { await appStore.initialize() }
+  catch (error) { uni.showToast({ title: error instanceof ApiClientError ? error.message : '店铺数据加载失败', icon: 'none' }) }
+})
 </script>
 
 <template>
-  <view class="page-shell history-page" :class="appStore.fontClass"><PageHeader title="历史记录" back /><view class="page-pad"><view v-if="appStore.history.length" class="timeline"><view v-for="item in appStore.history" :key="item.id" class="history-item"><view class="dot" :class="{ green: item.action === '到店打卡' }" /><image class="history-image" :src="appStore.findStore(item.storeId)?.image" mode="aspectFill" /><view class="history-copy"><text class="history-name">{{ appStore.findStore(item.storeId)?.name }}</text><text class="history-action">{{ item.action }} · {{ appStore.findArea(appStore.findStore(item.storeId))?.name }}</text><text class="history-date">{{ item.date }}</text></view></view></view><EmptyState v-else title="还没有历史记录" description="浏览或抽取店铺后会显示在这里" /></view></view>
+  <view class="page-shell history-page" :class="appStore.fontClass"><PageHeader title="历史记录" back /><view class="page-pad"><view v-if="appStore.history.length" class="timeline"><view v-for="item in appStore.history" :key="item.id" class="history-item"><view class="dot" :class="{ green: item.action === '到店打卡' }" /><image class="history-image" :src="storeImageUrl(appStore.findStore(item.storeId))" mode="aspectFill" /><view class="history-copy"><text class="history-name">{{ appStore.findStore(item.storeId)?.name }}</text><text class="history-action">{{ item.action }} · {{ appStore.findArea(appStore.findStore(item.storeId))?.name }}</text><text class="history-date">{{ item.date }}</text></view></view></view><EmptyState v-else title="还没有历史记录" description="浏览或抽取店铺后会显示在这里" /></view></view>
 </template>
 
 <style scoped>

@@ -1,4 +1,5 @@
 import { devLogin, type AuthData, wechatLogin } from '@/api/auth'
+import { setAuthRefreshHandler } from '@/api/client'
 import { ApiClientError } from '@/api/types'
 import { env } from '@/config/env'
 import { clearAccessToken, getAccessToken } from './token'
@@ -79,3 +80,5 @@ export async function forceRelogin(staleToken?: string | null): Promise<void> {
   clearAccessToken()
   await login()
 }
+
+setAuthRefreshHandler(forceRelogin)
