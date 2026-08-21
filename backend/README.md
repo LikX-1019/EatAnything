@@ -49,6 +49,10 @@ backend\scripts\server_tunnel.ps1 Stop
 
 隧道会将本机 PostgreSQL 地址 `127.0.0.1:5433` 和 MinIO 地址 `127.0.0.1:9000` 转发到服务器。凭据只保存在仓库根目录的 `.env` 中，不会出现在 SSH 命令行参数里。
 
+## 生产部署
+
+服务器端使用 Docker Compose 部署（PostgreSQL、MinIO、MinIO 初始化、API），完整步骤见仓库根目录的 [deploy/README.md](../deploy/README.md)。部署环境变量使用 `deploy/.env`，与本机开发的仓库根目录 `.env` 相互独立。
+
 ## 验证
 
 ```powershell
