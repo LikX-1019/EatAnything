@@ -35,3 +35,9 @@ def test_required_paths_are_exposed() -> None:
 def test_admin_status_schema_uses_database_values() -> None:
     schema = app.openapi()["components"]["schemas"]["AdminStoreCreateRequest"]
     assert schema["properties"]["status"]["pattern"] == "^(active|hidden|closed)$"
+
+
+def test_random_store_response_uses_camel_case_fields() -> None:
+    schema = app.openapi()["components"]["schemas"]["RandomStoreData"]
+    assert "historyId" in schema["properties"]
+    assert "history_id" not in schema["properties"]

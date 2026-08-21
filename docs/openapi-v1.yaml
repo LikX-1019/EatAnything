@@ -1463,7 +1463,7 @@ components:
         storeCode:
           type: string
           pattern: '^[a-z0-9_-]{2,100}$'
-          description: 对应数据库 stores.slug
+          description: 对应数据库 stores.store_code
         name:
           type: string
           minLength: 1
@@ -1507,7 +1507,7 @@ components:
         storeCode:
           type: string
           pattern: '^[a-z0-9_-]{2,100}$'
-          description: 服务端去除首尾空格并转为小写，对应 stores.slug
+          description: 服务端去除首尾空格并转为小写，对应 stores.store_code
         name:
           type: string
           minLength: 1

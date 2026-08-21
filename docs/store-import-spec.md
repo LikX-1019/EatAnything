@@ -13,7 +13,7 @@
 | 数据行数 | 1–1000 行，不含表头 |
 | CSV 编码 | UTF-8，可带 BOM；分隔符为英文逗号 |
 | XLSX 工作表 | 读取第一个可见工作表；首行为表头 |
-| 表头 | 必须与字段名完全一致；允许调整列顺序；未知列、缺失必填列或重复列均拒绝导入 |
+| 表头 | 必须与字段名和顺序完全一致；未知列、缺失列或重复列均拒绝导入 |
 | 空行 | 完全空白的行忽略；部分填写的行按正常数据校验 |
 | 公式与宏 | 不执行公式或宏；公式单元格视为非法值 |
 
@@ -21,7 +21,9 @@
 
 | 字段 | 必填 | 类型/长度 | 示例 | 规则 |
 | --- | --- | --- | --- | --- |
-| `storeCode` | 是 | 字符串，2–100 | `cq-hotpot-001` | 仅允许小写字母、数字、`-`、`_`；去除首尾空格并转为小写；对应数据库 `stores.slug` |
+| `storeCode` | 是 | 字符串，2–100 | `wtbu-south-001` | 仅允许小写字母、数字、`-`、`_`；去除首尾空格并转为小写；对应数据库 `stores.store_code` |
+| `schoolCode` | 是 | 字符串，2–64 | `wtbu` | 必须是系统中已启用的学校编码 |
+| `areaCode` | 是 | 字符串，2–64 | `south-canteen` | 必须是该学校下已启用的区域编码 |
 | `name` | 是 | 字符串，1–100 | `重庆老火锅` | 去除首尾空格后不能为空 |
 | `category` | 是 | 字符串，1–50 | `川菜 · 火锅` | MVP 使用单个展示文本，不拆分标签 |
 | `address` | 是 | 字符串，1–200 | `中山路88号` | 仅作为文字展示，不导入经纬度或距离 |
@@ -32,12 +34,12 @@
 
 ## 4. 新增与更新规则
 
-1. 系统对 `storeCode` 执行去空格和小写标准化后匹配 `stores.slug`。
+1. 系统对 `storeCode` 执行去空格和小写标准化后匹配 `stores.store_code`。
 2. 数据库中不存在该编码时执行新增。
 3. 数据库中已存在且未归档时执行覆盖更新。
 4. 数据库中已关闭时允许管理员更新；重新上架需显式将状态改为 `active`。
 5. 同一文件中标准化后出现重复编码时返回 `DUPLICATE_STORE_CODE_IN_FILE`。
-6. 更新已有店铺时，`name`、`category`、`address`、`status` 使用导入值覆盖；空 `imageUrl` 保留旧图片，非空值覆盖旧图片。
+6. 更新已有店铺时，学校、区域、`name`、`category`、`address`、`status` 使用导入值覆盖；空 `imageUrl` 保留旧图片，非空值覆盖旧图片。
 7. 新增或更新为 `active` 时，导入值或已有数据中必须存在有效图片，否则返回 `ACTIVE_STORE_IMAGE_REQUIRED`。
 8. 成功导入不会修改店铺评分、评价、收藏、吃过和历史数据。
 
@@ -123,8 +125,8 @@ HTTP 状态为 `422`，没有任何数据写入：
 ## 9. 示例 CSV
 
 ```csv
-storeCode,name,category,address,imageUrl,status
-cq-hotpot-001,重庆老火锅,川菜 · 火锅,中山路88号,https://cdn.example.com/stores/hotpot.jpg,active
-jp-sushi-001,樱花日料,日料 · 寿司,人民路120号,https://cdn.example.com/stores/sushi.jpg,active
-tea-001,茶颜悦色,饮品 · 奶茶,建国路10号,,hidden
+storeCode,schoolCode,areaCode,name,category,address,imageUrl,status
+wtbu-south-001,wtbu,south-canteen,南区一品香自选餐,自选餐,南区食堂一层01号,https://cdn.example.com/stores/rice.jpg,active
+wtbu-north-001,wtbu,north-canteen,北区老坛酸菜鱼,川湘菜,北区食堂一层01号,https://cdn.example.com/stores/fish.jpg,active
+wtbu-north-002,wtbu,north-canteen,韩式石锅拌饭,韩餐,北区食堂一层02号,,hidden
 ```

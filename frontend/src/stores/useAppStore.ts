@@ -28,7 +28,7 @@ function loadAreaMap(): Record<string, string> {
       return { ...stored } as Record<string, string>
     }
   } catch {
-    // Use the first real store area when storage is unavailable.
+    // 本地存储不可用时，使用第一个真实店铺区域。
   }
   return {}
 }
@@ -280,7 +280,7 @@ export const useAppStore = defineStore('app', () => {
     try {
       await userStore.refreshProfile()
     } catch {
-      // The behavior write already succeeded; refresh the counters again when Profile opens.
+      // 行为记录已经写入成功，打开个人中心时再刷新统计数据。
     }
   }
 
@@ -296,7 +296,7 @@ export const useAppStore = defineStore('app', () => {
       await recordStoreVisit(storeId)
       await loadHistory()
     } catch {
-      // Visit history is secondary to opening a store detail page.
+      // 相比打开店铺详情，记录访问历史属于次要操作。
     }
   }
 

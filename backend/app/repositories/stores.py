@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Review, Store
+from app.models import Review, Store, UserFavorite
+
+
+@dataclass(frozen=True, slots=True)
+class StoreStats:
+    score: float | None = None
+    review_count: int = 0
+    favorite_count: int = 0
 
 
 async def count_stores(
@@ -25,7 +33,7 @@ async def count_stores(
         query = query.where(Store.school_id == school_id)
     if keyword:
         pattern = f"%{keyword.strip()}%"
-        query = query.where(or_(Store.name.ilike(pattern), Store.address.ilike(pattern), Store.slug.ilike(pattern)))
+        query = query.where(or_(Store.name.ilike(pattern), Store.address.ilike(pattern), Store.store_code.ilike(pattern)))
     return int((await session.scalar(query)) or 0)
 
 
@@ -48,7 +56,7 @@ async def list_stores(
         query = query.where(Store.school_id == school_id)
     if keyword:
         pattern = f"%{keyword.strip()}%"
-        query = query.where(or_(Store.name.ilike(pattern), Store.address.ilike(pattern), Store.slug.ilike(pattern)))
+        query = query.where(or_(Store.name.ilike(pattern), Store.address.ilike(pattern), Store.store_code.ilike(pattern)))
     query = query.order_by(Store.updated_at.desc(), Store.id.desc()).offset((page - 1) * page_size).limit(page_size)
     return list((await session.scalars(query)).all())
 
@@ -68,16 +76,45 @@ async def get_store(
     return await session.scalar(query)
 
 
-async def stats_for_stores(session: AsyncSession, store_ids: Iterable[int]) -> dict[int, tuple[float | None, int]]:
+async def stats_for_stores(session: AsyncSession, store_ids: Iterable[int]) -> dict[int, StoreStats]:
     ids = list(store_ids)
     if not ids:
         return {}
-    query = (
-        select(Review.store_id, func.avg(Review.rating), func.count(Review.id))
+    review_stats = (
+        select(
+            Review.store_id,
+            func.avg(Review.rating).label("score"),
+            func.count(Review.id).label("review_count"),
+        )
         .where(Review.store_id.in_(ids), Review.status == "published")
         .group_by(Review.store_id)
+        .subquery()
     )
-    return {int(store_id): (float(score) if score is not None else None, int(count)) for store_id, score, count in (await session.execute(query)).all()}
+    favorite_stats = (
+        select(UserFavorite.store_id, func.count(UserFavorite.user_id).label("favorite_count"))
+        .where(UserFavorite.store_id.in_(ids))
+        .group_by(UserFavorite.store_id)
+        .subquery()
+    )
+    query = (
+        select(
+            Store.id,
+            review_stats.c.score,
+            review_stats.c.review_count,
+            favorite_stats.c.favorite_count,
+        )
+        .outerjoin(review_stats, review_stats.c.store_id == Store.id)
+        .outerjoin(favorite_stats, favorite_stats.c.store_id == Store.id)
+        .where(Store.id.in_(ids))
+    )
+    return {
+        int(store_id): StoreStats(
+            score=float(score) if score is not None else None,
+            review_count=int(review_count or 0),
+            favorite_count=int(favorite_count or 0),
+        )
+        for store_id, score, review_count, favorite_count in (await session.execute(query)).all()
+    }
 
 
 async def random_store_id(

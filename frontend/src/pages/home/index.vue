@@ -11,6 +11,7 @@ import StickerTabBar from '../../components/StickerTabBar.vue'
 import { useAppStore } from '../../stores/useAppStore'
 import { useUserStore } from '../../stores/useUserStore'
 import { storeImageUrl, storeScoreLabel } from '../../utils/store'
+import { syncTabBarSelected } from '../../utils/tabbar'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
@@ -43,7 +44,10 @@ async function loadHome(refresh = false) {
     if (refresh) uni.stopPullDownRefresh()
   }
 }
-onShow(() => { void loadHome() })
+onShow(() => {
+  syncTabBarSelected(0)
+  void loadHome()
+})
 onPullDownRefresh(() => { void loadHome(true) })
 
 function chooseSchool() { uni.navigateTo({ url: '/pages/schools/index' }) }
@@ -53,8 +57,9 @@ async function drawStore() {
   if (!userStore.profile?.schoolId) return uni.showToast({ title: '请先选择学校', icon: 'none' })
   const pool = appStore.activeSchoolStores
   if (!pool.length) return uni.showToast({ title: '当前学校暂无店铺', icon: 'none' })
+  rollingName.value = pool[0].name
   isDrawing.value = true
-  let cursor = 0
+  let cursor = 1
   shuffleTimer = setInterval(() => { rollingName.value = pool[cursor++ % pool.length].name }, 90)
   const animation = new Promise<void>((resolve) => {
     finishTimer = setTimeout(resolve, 720)
@@ -144,15 +149,20 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
           <view class="lucky-paper">
             <text class="sun-mark">☀</text><text class="lucky-label">幸运抽签</text>
             <template v-if="appStore.currentPick && !isDrawing">
-              <FallbackImage class="picked-image" :src="storeImageUrl(appStore.currentPick)" />
+              <FallbackImage class="picked-image" style="width: 286rpx; height: 190rpx;" :src="storeImageUrl(appStore.currentPick)" />
               <text class="picked-name">{{ appStore.currentPick.name }}</text>
               <text class="picked-meta">{{ appStore.currentPick.category }} · ★ {{ storeScoreLabel(appStore.currentPick) }}</text>
               <text class="picked-address">⌖ {{ appStore.currentPick.address }}</text>
             </template>
-            <template v-else>
-              <text class="mystery">{{ isDrawing ? rollingName : '???' }}</text>
-              <text class="pull-copy">{{ isDrawing ? '好运正在翻页…' : '拉一拉试试吧' }}</text>
-            </template>
+            <view v-else-if="isDrawing" class="rolling-state">
+              <text class="rolling-name">{{ rollingName }}</text>
+              <text class="rolling-copy">好运正在翻页…</text>
+            </view>
+            <view v-else class="ready-state">
+              <text class="ready-icon">🍽️</text>
+              <text class="ready-title">今天想吃点什么？</text>
+              <text class="ready-copy">拉一下，让好运替你选一家</text>
+            </view>
           </view>
         </view>
         <button class="pull-tab" :disabled="isDrawing || appStore.isPickLocked" hover-class="button-active" @tap="appStore.currentPick ? replaceCurrentPick() : drawStore()"><text class="tab-heart">♡</text><text>{{ isDrawing ? '抽签中' : appStore.currentPick ? '再抽一次' : 'PULL' }}</text></button>
@@ -184,9 +194,10 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
 .page-state { display: flex; align-items: center; justify-content: center; min-height: 520rpx; padding: 40rpx; color: var(--muted); font-size: 28rpx; flex-direction: column; text-align: center; }.retry-button { margin-top: 22rpx; padding: 0 26rpx; height: 70rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 26rpx; }
 .scope-card { margin-top: 12rpx; padding: 14rpx 16rpx; border: 1rpx dashed #d5b990; border-radius: 12rpx; background: rgba(255,250,236,.62); }.school-button { display: inline-flex; align-items: center; height: 48rpx; padding: 0; color: var(--brand-deep); font-size: 27rpx; font-weight: 800; }.chevron { margin-left: 4rpx; }.area-tabs { width: 100%; margin-top: 10rpx; white-space: nowrap; }.area-tab { display: inline-flex; align-items: center; height: 56rpx; margin-right: 10rpx; padding: 0 22rpx; border: 1rpx solid #dfc8a5; border-radius: 7rpx 12rpx 8rpx 11rpx; background: #fffaf0; color: #806b56; font-size: 25rpx; }.area-tab.active { border-color: #e38b78; background: #f8d8ce; color: #a85043; font-weight: 800; box-shadow: 0 3rpx 0 #dca092; }
 .random-scope-note { display: block; margin-top: 8rpx; color: var(--muted); font-size: 20rpx; }
-.lucky-stage { position: relative; min-height: 515rpx; margin: 20rpx 16rpx 0; padding: 25rpx 30rpx 68rpx; border: 3rpx solid rgba(220,145,125,.52); border-radius: 20rpx; background: rgba(244,180,165,.32); box-shadow: inset 0 0 0 12rpx rgba(255,255,255,.23); }.lucky-stage::before { position: absolute; top: 12rpx; right: 16rpx; bottom: 12rpx; left: 16rpx; border: 2rpx dashed rgba(195,115,95,.35); border-radius: 16rpx; content: ''; }.corner-flower, .corner-star { position: absolute; z-index: 3; color: var(--brand); font-size: 35rpx; }.corner-flower { top: 16rpx; left: 18rpx; }.corner-star { top: 20rpx; right: 22rpx; color: var(--amber); }
-.lucky-frame { position: relative; z-index: 2; padding: 16rpx; background: rgba(255,247,226,.75); box-shadow: var(--paper-shadow); transform: rotate(-1deg); }.lucky-paper { position: relative; display: flex; align-items: center; flex-direction: column; justify-content: center; min-height: 355rpx; padding: 22rpx 20rpx; border: 1rpx solid #d8bd99; background: #fffaf0; box-shadow: inset 0 0 22rpx rgba(157,111,66,.06); }.lucky-paper::before, .lucky-paper::after { position: absolute; top: -15rpx; width: 86rpx; height: 30rpx; background: rgba(239,200,145,.5); content: ''; }.lucky-paper::before { left: -26rpx; transform: rotate(-25deg); }.lucky-paper::after { right: -24rpx; transform: rotate(24deg); }.sun-mark { color: var(--amber); font-size: 32rpx; }.lucky-label { margin-top: 3rpx; font-size: 31rpx; font-weight: 900; letter-spacing: 4rpx; }.mystery { max-width: 100%; margin-top: 34rpx; overflow: hidden; font-size: 64rpx; font-weight: 900; letter-spacing: 10rpx; text-overflow: ellipsis; white-space: nowrap; }.pull-copy { margin-top: 20rpx; color: #71523b; font-size: 27rpx; }
-.picked-image { width: 286rpx; height: 190rpx; margin-top: 16rpx; padding: 6rpx; border: 1rpx solid #dec8a8; background: #fff; box-shadow: 0 6rpx 10rpx rgba(94,67,38,.18); transform: rotate(1.5deg); }.picked-name { margin-top: 15rpx; font-size: 36rpx; font-weight: 900; }.picked-meta, .picked-address { margin-top: 7rpx; color: var(--muted); font-size: 24rpx; }
+.lucky-stage { position: relative; height: 592rpx; margin: 20rpx 16rpx 0; padding: 25rpx 30rpx 68rpx; border: 3rpx solid rgba(220,145,125,.52); border-radius: 20rpx; background: rgba(244,180,165,.32); box-shadow: inset 0 0 0 12rpx rgba(255,255,255,.23); }.lucky-stage::before { position: absolute; top: 12rpx; right: 16rpx; bottom: 12rpx; left: 16rpx; border: 2rpx dashed rgba(195,115,95,.35); border-radius: 16rpx; content: ''; }.corner-flower, .corner-star { position: absolute; z-index: 3; color: var(--brand); font-size: 35rpx; }.corner-flower { top: 16rpx; left: 18rpx; }.corner-star { top: 20rpx; right: 22rpx; color: var(--amber); }
+.lucky-frame { position: relative; z-index: 2; padding: 16rpx; background: rgba(255,247,226,.75); box-shadow: var(--paper-shadow); transform: rotate(-1deg); }.lucky-paper { position: relative; display: flex; align-items: center; flex-direction: column; justify-content: flex-start; height: 460rpx; padding: 22rpx 20rpx; overflow: hidden; border: 1rpx solid #d8bd99; background: #fffaf0; box-shadow: inset 0 0 22rpx rgba(157,111,66,.06); }.lucky-paper::before, .lucky-paper::after { position: absolute; top: -15rpx; width: 86rpx; height: 30rpx; background: rgba(239,200,145,.5); content: ''; }.lucky-paper::before { left: -26rpx; transform: rotate(-25deg); }.lucky-paper::after { right: -24rpx; transform: rotate(24deg); }.sun-mark { flex: 0 0 auto; color: var(--amber); font-size: 32rpx; }.lucky-label { flex: 0 0 auto; margin-top: 3rpx; font-size: 31rpx; font-weight: 900; letter-spacing: 4rpx; }
+.rolling-state, .ready-state { display: flex; align-items: center; flex: 1; flex-direction: column; justify-content: center; width: 100%; min-height: 0; text-align: center; }.rolling-name { display: block; width: 100%; overflow: hidden; color: var(--ink); font-size: 43rpx; font-weight: 900; line-height: 1.35; text-align: center; text-overflow: ellipsis; white-space: nowrap; }.rolling-copy { margin-top: 18rpx; color: var(--muted); font-size: 24rpx; }.ready-icon { font-size: 62rpx; line-height: 1; }.ready-title { margin-top: 20rpx; color: var(--ink); font-size: 34rpx; font-weight: 900; }.ready-copy { margin-top: 13rpx; color: var(--muted); font-size: 24rpx; }
+.picked-image { display: block; flex: 0 0 auto; width: 286rpx; height: 190rpx; max-width: calc(100% - 20rpx); margin-top: 16rpx; padding: 6rpx; overflow: hidden; border: 1rpx solid #dec8a8; background: #fff; box-shadow: 0 6rpx 10rpx rgba(94,67,38,.18); transform: rotate(1.5deg); }.picked-name, .picked-meta, .picked-address { display: block; max-width: 100%; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }.picked-name { margin-top: 15rpx; font-size: 36rpx; font-weight: 900; }.picked-meta, .picked-address { margin-top: 7rpx; color: var(--muted); font-size: 24rpx; }
 .pull-tab { position: absolute; z-index: 4; right: 72rpx; bottom: -38rpx; display: flex; align-items: center; flex-direction: column; justify-content: center; width: 122rpx; height: 124rpx; border: 1rpx solid #dc9e82; border-radius: 3rpx 3rpx 14rpx 14rpx; background: #f7d7c4; color: #634332; font-size: 24rpx; font-weight: 900; letter-spacing: 2rpx; box-shadow: 0 5rpx 8rpx rgba(104,63,39,.15); transform: rotate(2deg); }.pull-tab::before { position: absolute; top: -9rpx; width: 33rpx; height: 18rpx; border: 2rpx solid #9e7156; border-radius: 50%; content: ''; }.pull-tab[disabled] { opacity: .65; }.tab-heart { font-size: 29rpx; }.string { position: absolute; right: 124rpx; bottom: -82rpx; width: 2rpx; height: 58rpx; background: #8b5c42; transform: rotate(-5deg); }.button-active { transform: translateY(3rpx) rotate(2deg); }
 .result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; margin: 72rpx 16rpx 0; }.favorite-button, .lock-button { display: flex; align-items: center; justify-content: center; height: 82rpx; padding: 0 12rpx; border-radius: 10rpx; font-size: 30rpx; font-weight: 900; line-height: 1.2; text-align: center; }.favorite-button { border: 2rpx dashed #df9b8e; background: #fffaf0; color: var(--brand); }.lock-button { background: var(--green); color: #fff; box-shadow: 0 5rpx 0 #5f8857; }.lock-button.locked { border: 2rpx dashed #d98e79; background: #fff5e9; color: #b65e4d; box-shadow: 0 4rpx 0 #e4b29f; }.check-in-row { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; margin: 16rpx; padding: 16rpx 18rpx; border: 1rpx dashed #88aa75; background: #edf4df; color: #53704c; font-size: 24rpx; }.check-in-row button { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; padding: 13rpx 17rpx; border-radius: 8rpx; background: var(--green); color: #fff; font-size: 24rpx; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; margin: 76rpx 0 18rpx; font-size: 32rpx; font-weight: 900; }.section-heading > text:first-child { padding: 5rpx 14rpx; background: linear-gradient(transparent 55%, rgba(239,165,137,.45) 55%); }.section-heading text:last-child { color: var(--muted); font-size: 23rpx; font-weight: 400; }.activity-list { display: flex; flex-direction: column; gap: 15rpx; }.activity-item { display: flex; width: 90%; min-height: 124rpx; padding: 16rpx 18rpx; border: 1rpx solid #e4d3b9; border-radius: 12rpx 6rpx 14rpx 7rpx; background: #fffaf0; box-shadow: 0 4rpx 9rpx rgba(92,62,34,.1); transform: rotate(-.45deg); }.activity-item.note-1 { margin-left: 8%; background: #fff5dd; transform: rotate(.6deg); }.activity-item.note-2 { margin-left: 3%; background: #f8eee2; transform: rotate(-.2deg); }.comment-avatar { display: flex; align-items: center; justify-content: center; width: 60rpx; height: 60rpx; border: 2rpx solid #fff; border-radius: 50%; background: #efb58f; color: #704832; font-size: 25rpx; font-weight: 900; box-shadow: 0 0 0 1rpx #d9b48d; }.activity-copy { min-width: 0; flex: 1; padding-left: 15rpx; }.activity-title { display: flex; justify-content: space-between; gap: 10rpx; font-size: 25rpx; font-weight: 900; }.rating { max-width: 230rpx; overflow: hidden; color: var(--brand); font-size: 23rpx; text-overflow: ellipsis; white-space: nowrap; }.activity-comment { display: block; margin-top: 7rpx; color: #604d3c; font-size: 25rpx; }.activity-time { display: block; margin-top: 5rpx; color: var(--muted); font-size: 21rpx; }

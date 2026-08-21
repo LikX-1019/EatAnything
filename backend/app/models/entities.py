@@ -9,6 +9,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Identity,
     Integer,
     Numeric,
@@ -18,6 +19,7 @@ from sqlalchemy import (
     Text,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
@@ -93,22 +95,53 @@ class School(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
 
 
+class SchoolArea(Base):
+    __tablename__ = "school_areas"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    school_id: Mapped[int] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    area_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500))
+    sort_order: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), server_default=text("'active'"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    school: Mapped[School] = relationship(lazy="joined")
+
+
 class Store(Base):
     __tablename__ = "stores"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["school_id", "area_id"],
+            ["school_areas.school_id", "school_areas.id"],
+            name="fk_stores_school_area",
+            ondelete="RESTRICT",
+        ),
+    )
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
-    slug: Mapped[str] = mapped_column(String(100), unique=True)
-    school_id: Mapped[int | None] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"))
+    store_code: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    school_id: Mapped[int] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    area_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     name: Mapped[str] = mapped_column(String(120))
     description: Mapped[str | None] = mapped_column(Text)
     city: Mapped[str | None] = mapped_column(String(60))
     district: Mapped[str | None] = mapped_column(String(60))
     address: Mapped[str] = mapped_column(String(255))
-    area: Mapped[str] = mapped_column(String(100), server_default=text("''"))
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    phone: Mapped[str | None] = mapped_column(String(40))
+    business_hours: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"), nullable=False)
     status: Mapped[str] = mapped_column(String(20), server_default=text("'active'"))
     version: Mapped[int] = mapped_column(Integer, server_default=text("1"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
-    school: Mapped[School | None] = relationship(lazy="joined")
+    school: Mapped[School] = relationship(lazy="joined", foreign_keys=[school_id], overlaps="area")
+    area: Mapped[SchoolArea] = relationship(
+        lazy="joined",
+        foreign_keys=[school_id, area_id],
+        overlaps="school",
+    )
     categories: Mapped[list[StoreCategory]] = relationship(secondary=store_category_links, lazy="selectin")
     images: Mapped[list[StoreImage]] = relationship(back_populates="store", lazy="selectin", cascade="all, delete-orphan")
 

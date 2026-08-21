@@ -10,6 +10,8 @@ from app.services.stores import attach_image
 def test_store_code_is_normalized_and_validated() -> None:
     payload = AdminStoreCreateRequest(
         storeCode="  VALID_store-1  ",
+        schoolId=1,
+        areaId=1,
         name=" Test Store ",
         category=" Noodles ",
         address=" Main Street ",
@@ -23,6 +25,8 @@ def test_store_code_is_normalized_and_validated() -> None:
     with pytest.raises(ValidationError):
         AdminStoreCreateRequest(
             storeCode="invalid code!",
+            schoolId=1,
+            areaId=1,
             name="Test Store",
             category="Noodles",
             address="Main Street",
@@ -33,6 +37,8 @@ def test_store_code_is_normalized_and_validated() -> None:
 def test_store_create_rejects_blank_required_text(field: str) -> None:
     data = {
         "storeCode": "valid-store",
+        "schoolId": 1,
+        "areaId": 1,
         "name": "Test Store",
         "category": "Noodles",
         "address": "Main Street",

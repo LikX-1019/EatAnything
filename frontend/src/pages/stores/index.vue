@@ -12,6 +12,7 @@ import StickerTabBar from '../../components/StickerTabBar.vue'
 import { useAppStore } from '../../stores/useAppStore'
 import { useUserStore } from '../../stores/useUserStore'
 import type { StoreItem } from '../../types'
+import { syncTabBarSelected } from '../../utils/tabbar'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
@@ -89,7 +90,10 @@ async function loadStoresPage(refresh = false) {
     if (refresh) uni.stopPullDownRefresh()
   }
 }
-onShow(() => { void loadStoresPage() })
+onShow(() => {
+  syncTabBarSelected(1)
+  void loadStoresPage()
+})
 onPullDownRefresh(() => { void loadStoresPage(true) })
 
 onUnmounted(() => {

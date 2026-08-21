@@ -62,7 +62,7 @@ async def http_error_handler(request: Request, error: StarletteHTTPException) ->
 
 async def integrity_error_handler(request: Request, error: IntegrityError) -> JSONResponse:
     message = str(error.orig).lower()
-    if "store" in message and "slug" in message:
+    if "stores" in message and ("store_code" in message or "uq_stores_store_code" in message):
         code = "STORE_CODE_CONFLICT"
         text = "店铺编码已存在"
     elif "admin_users" in message or "username" in message:

@@ -10,9 +10,11 @@ export interface PageData<T> {
 export interface StoreSummary {
   id: string
   storeCode: string
-  schoolId?: string | null
-  schoolCode?: string | null
-  schoolName?: string | null
+  schoolId: string
+  schoolCode: string
+  schoolName: string
+  areaId: string
+  areaCode: string
   name: string
   category: string
   address: string
@@ -20,6 +22,7 @@ export interface StoreSummary {
   imageUrl?: string | null
   score?: number | null
   reviewCount: number
+  favoriteCount: number
   isFavorite: boolean
   isEaten: boolean
 }
@@ -28,6 +31,10 @@ export interface StoreDetail extends StoreSummary {
   description?: string | null
   city?: string | null
   district?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  phone?: string | null
+  businessHours: Record<string, unknown>
   createdAt: string
   updatedAt: string
 }

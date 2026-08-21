@@ -12,10 +12,10 @@ def store() -> SimpleNamespace:
     return SimpleNamespace(
         id=2,
         status="active",
-        slug="noodle-house",
+        store_code="noodle-house",
         name="面馆",
         address="东门",
-        area="东区",
+        area=SimpleNamespace(name="东区"),
         categories=[],
         images=[],
     )

@@ -30,14 +30,25 @@ function isRecord(value: unknown): value is RecordValue {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function camelCaseKey(value: string): string {
+  return value.replace(/_([a-z0-9])/g, (_match, character: string) => character.toUpperCase())
+}
+
+function normalizeObjectKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeObjectKeys)
+  if (!isRecord(value)) return value
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [camelCaseKey(key), normalizeObjectKeys(item)]),
+  )
+}
+
 function normalizeResponseData(value: unknown): unknown {
-  if (typeof value !== 'string') {
-    return value
-  }
+  if (typeof value !== 'string') return normalizeObjectKeys(value)
 
   try {
     const parsed: unknown = JSON.parse(value)
-    return parsed
+    return normalizeObjectKeys(parsed)
   } catch {
     return value
   }
@@ -115,8 +126,14 @@ interface UniRequestFailure {
 function networkError(failure: UniRequestFailure, fallback: string): ApiClientError {
   const message = failure.errMsg || fallback
   const isTimeout = /timeout|timed out|超时/i.test(message)
-  return new ApiClientError(message, {
-    code: isTimeout ? 'NETWORK_TIMEOUT' : 'NETWORK_ERROR',
+  const isRequestFailure = /request:fail/i.test(message)
+  const displayMessage = isTimeout
+    ? '服务器响应超时，请稍后重试'
+    : isRequestFailure
+      ? '无法连接服务器，请检查接口地址和小程序合法域名配置'
+      : message
+  return new ApiClientError(displayMessage, {
+    code: isTimeout ? 'NETWORK_TIMEOUT' : isRequestFailure ? 'NETWORK_REQUEST_FAILED' : 'NETWORK_ERROR',
     cause: failure,
   })
 }

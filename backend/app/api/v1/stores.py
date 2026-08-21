@@ -4,7 +4,7 @@ from app.core.dependencies import SessionDep, UserDep, get_minio
 from app.core.errors import ApiError
 from app.integrations.minio import MinioStorage
 from app.schemas.common import ApiResponse, PageData
-from app.schemas.stores import RandomStoreRequest, StoreDetail, StoreSummary
+from app.schemas.stores import RandomStoreData, RandomStoreRequest, StoreDetail, StoreSummary
 from app.services.stores import get_user_store, random_user_store, user_store_page
 from app.repositories.history import add_history
 from app.repositories.stores import get_store
@@ -37,7 +37,7 @@ async def list_stores(
     return response(request, {"items": items, "page": page, "page_size": page_size, "total": total})
 
 
-@router.post("/random", response_model=ApiResponse[dict])
+@router.post("/random", response_model=ApiResponse[RandomStoreData])
 async def random_store(payload: RandomStoreRequest | None, request: Request, user: UserDep, session: SessionDep, storage: MinioStorage = Depends(get_minio)):
     exclude_id = parse_store_id(payload.exclude_store_id) if payload and payload.exclude_store_id else None
     store, history_id = await random_user_store(session, storage, user.id, exclude_id, user.school_id)

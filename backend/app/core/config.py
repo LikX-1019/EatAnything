@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     minio_public_url: str = Field(validation_alias="MINIO_PUBLIC_URL")
     max_upload_bytes: int = Field(default=5 * 1024 * 1024, validation_alias="MAX_UPLOAD_BYTES")
     cors_origins: str = Field(default="", validation_alias="CORS_ORIGINS")
+    seed_admin_password: str | None = Field(default=None, validation_alias="SEED_ADMIN_PASSWORD")
 
     model_config = SettingsConfigDict(
         env_file=str(PROJECT_ROOT / ".env"),

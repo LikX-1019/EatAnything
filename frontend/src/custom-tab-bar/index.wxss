@@ -4,14 +4,22 @@
   right: 0;
   bottom: 0;
   left: 0;
-  height: calc(136rpx + env(safe-area-inset-bottom));
+  height: 116rpx;
   pointer-events: none;
+}
+
+.cheese-font {
+  font-family: "ZQKNLT", "小可奶酪体", "Kaiti SC", "STKaiti", "KaiTi", "PingFang SC", cursive;
+}
+
+.system-font {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
 }
 
 .paper-tabbar {
   position: absolute;
   right: 14rpx;
-  bottom: calc(10rpx + env(safe-area-inset-bottom));
+  bottom: 0;
   left: 14rpx;
   display: flex;
   align-items: center;
@@ -44,9 +52,10 @@
   flex-direction: column;
   justify-content: center;
   height: 98rpx;
-  color: #493424;
+  color: #836d58;
   font-size: 23rpx;
-  font-weight: 600;
+  font-weight: 700;
+  font-family: inherit;
 }
 
 .tab-icon {
@@ -60,5 +69,6 @@
 }
 
 .active {
+  color: #493424;
   font-weight: 900;
 }

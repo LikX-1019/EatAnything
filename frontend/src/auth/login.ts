@@ -72,7 +72,7 @@ export async function ensureLogin(): Promise<void> {
 export async function forceRelogin(staleToken?: string | null): Promise<void> {
   const currentToken = getAccessToken()
 
-  // A different concurrent request may already have refreshed the stale token.
+  // 其他并发请求可能已经刷新了过期令牌。
   if (staleToken !== undefined && currentToken && currentToken !== staleToken) {
     return
   }

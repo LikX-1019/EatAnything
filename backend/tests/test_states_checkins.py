@@ -156,6 +156,5 @@ async def test_store_state_without_school_has_no_current_school_items() -> None:
 def test_history_query_keeps_user_history_across_school_switch() -> None:
     from app.repositories.history import list_history
 
-    # The repository contract intentionally scopes only by user and action;
-    # switching the current school must not delete historical records.
+    # 仓储层接口只按用户和行为筛选；切换当前学校不能删除历史记录。
     assert "school_id" not in signature(list_history).parameters

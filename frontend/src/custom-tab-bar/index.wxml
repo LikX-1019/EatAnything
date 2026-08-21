@@ -1,4 +1,4 @@
-<view class="tabbar-shell">
+<view class="tabbar-shell {{fontClass}}">
   <view class="paper-tabbar">
     <view class="torn-edge" />
     <view

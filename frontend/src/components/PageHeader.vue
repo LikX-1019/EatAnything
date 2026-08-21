@@ -9,7 +9,7 @@ try {
     navBarHeight = (menuButton.top - statusBarHeight) * 2 + menuButton.height
   }
 } catch {
-  // H5 does not expose the WeChat capsule; 44px matches the native fallback.
+  // H5 无法获取微信胶囊按钮信息，使用 44px 模拟原生回退高度。
 }
 
 const headerHeight = statusBarHeight + navBarHeight

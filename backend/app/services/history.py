@@ -10,11 +10,11 @@ def history_view(item, storage: MinioStorage) -> dict:
         "occurred_at": item.occurred_at,
         "store": {
             "id": str(store.id),
-            "store_code": store.slug,
+            "store_code": store.store_code,
             "name": store.name,
             "category": categories_text(store),
             "address": store.address,
-            "area": store.area,
+            "area": store.area.name,
             "image_url": primary_image_url(store, storage),
             "is_available": store.status == "active",
         },

@@ -29,7 +29,7 @@ function readBoolean(value: string | undefined, name: string): boolean {
 }
 
 const mode = import.meta.env.MODE
-const isProduction = mode === 'production' || import.meta.env.PROD
+const isProduction = mode === 'production'
 const isDevelopment = mode === 'development'
 const isTest = mode === 'test'
 const devLoginRequested = readBoolean(import.meta.env.VITE_DEV_LOGIN_ENABLED, 'VITE_DEV_LOGIN_ENABLED')

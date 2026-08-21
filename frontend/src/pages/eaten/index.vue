@@ -10,6 +10,7 @@ import StickerTabBar from '../../components/StickerTabBar.vue'
 import { useAppStore } from '../../stores/useAppStore'
 import type { StoreItem } from '../../types'
 import { storeImageUrl } from '../../utils/store'
+import { syncTabBarSelected } from '../../utils/tabbar'
 import FallbackImage from '../../components/FallbackImage.vue'
 
 const appStore = useAppStore()
@@ -59,7 +60,10 @@ async function loadEaten(refresh = false) {
   catch (error) { errorMessage.value = error instanceof ApiClientError ? error.message : '吃过列表加载失败，请重试'; uni.showToast({ title: errorMessage.value, icon: 'none' }) }
   finally { loading.value = false; if (refresh) uni.stopPullDownRefresh() }
 }
-onShow(() => { void loadEaten() })
+onShow(() => {
+  syncTabBarSelected(2)
+  void loadEaten()
+})
 onPullDownRefresh(() => { void loadEaten(true) })
 </script>
 

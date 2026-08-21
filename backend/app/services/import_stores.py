@@ -13,11 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.errors import ApiError
 from app.integrations.minio import MinioStorage
-from app.models import Store
+from app.models import School, SchoolArea, Store
 from app.services.stores import attach_image, ensure_categories, replace_categories
 
 
-HEADERS = ["storeCode", "name", "category", "address", "imageUrl", "status"]
+HEADERS = ["storeCode", "schoolCode", "areaCode", "name", "category", "address", "imageUrl", "status"]
 VALID_STATUSES = {"active", "hidden", "closed"}
 
 
@@ -48,7 +48,11 @@ async def parse_rows(content: bytes, filename: str, settings: Settings) -> list[
         raise ApiError(422, "IMPORT_VALIDATION_FAILED", "导入文件不能为空")
     headers = [_cell(value) for value in rows[0]]
     if headers != HEADERS:
-        raise ApiError(422, "IMPORT_VALIDATION_FAILED", "表头必须为 storeCode,name,category,address,imageUrl,status")
+        raise ApiError(
+            422,
+            "IMPORT_VALIDATION_FAILED",
+            "表头必须为 storeCode,schoolCode,areaCode,name,category,address,imageUrl,status",
+        )
     data_rows = [row for row in rows[1:] if any(_cell(value) for value in row)]
     if not data_rows:
         raise ApiError(422, "IMPORT_VALIDATION_FAILED", "导入文件没有数据行")
@@ -62,16 +66,35 @@ async def parse_rows(content: bytes, filename: str, settings: Settings) -> list[
         values += [""] * (len(HEADERS) - len(values))
         item = dict(zip(HEADERS, values[: len(HEADERS)]))
         item["storeCode"] = item["storeCode"].lower()
+        item["schoolCode"] = item["schoolCode"].lower()
+        item["areaCode"] = item["areaCode"].lower()
         if item["storeCode"] in seen:
             errors.append({"row": row_number, "field": "storeCode", "code": "DUPLICATE_STORE_CODE_IN_FILE", "message": "店铺编码在文件中重复"})
         seen.add(item["storeCode"])
-        for field, max_length in [("storeCode", 100), ("name", 120), ("category", 50), ("address", 255)]:
+        for field, max_length in [
+            ("storeCode", 100),
+            ("schoolCode", 64),
+            ("areaCode", 64),
+            ("name", 120),
+            ("category", 50),
+            ("address", 255),
+        ]:
             if not item[field]:
                 errors.append({"row": row_number, "field": field, "code": "REQUIRED_FIELD", "message": "字段不能为空"})
             elif len(item[field]) > max_length:
                 errors.append({"row": row_number, "field": field, "code": "FIELD_TOO_LONG", "message": "字段长度超出限制"})
         if item["storeCode"] and not re.fullmatch(r"[a-z0-9_-]{2,100}", item["storeCode"]):
             errors.append({"row": row_number, "field": "storeCode", "code": "INVALID_STORE_CODE", "message": "店铺编码只能包含小写字母、数字、- 和 _"})
+        for field, label in [("schoolCode", "学校编码"), ("areaCode", "区域编码")]:
+            if item[field] and not re.fullmatch(r"[a-z0-9_-]{2,64}", item[field]):
+                errors.append(
+                    {
+                        "row": row_number,
+                        "field": field,
+                        "code": "INVALID_CODE",
+                        "message": f"{label}只能包含小写字母、数字、- 和 _",
+                    }
+                )
         if item["status"] not in VALID_STATUSES:
             errors.append({"row": row_number, "field": "status", "code": "INVALID_ENUM_VALUE", "message": "状态必须为 active、hidden 或 closed"})
         if item["imageUrl"]:
@@ -87,18 +110,57 @@ async def parse_rows(content: bytes, filename: str, settings: Settings) -> list[
 async def import_stores(session: AsyncSession, storage: MinioStorage, settings: Settings, content: bytes, filename: str) -> dict:
     rows = await parse_rows(content, filename, settings)
     codes = [row["storeCode"] for row in rows]
-    existing = {store.slug: store for store in (await session.scalars(select(Store).where(Store.slug.in_(codes)))).all()}
+    requested_areas = {(row["schoolCode"], row["areaCode"]) for row in rows}
+    school_codes = {school_code for school_code, _ in requested_areas}
+    area_codes = {area_code for _, area_code in requested_areas}
+    area_rows = (
+        await session.execute(
+            select(School.school_code, SchoolArea.area_code, School.id, SchoolArea.id)
+            .join(SchoolArea, SchoolArea.school_id == School.id)
+            .where(School.school_code.in_(school_codes), SchoolArea.area_code.in_(area_codes))
+        )
+    ).all()
+    area_map = {
+        (school_code, area_code): (school_id, area_id)
+        for school_code, area_code, school_id, area_id in area_rows
+    }
+    unknown_areas = sorted(requested_areas - set(area_map))
+    if unknown_areas:
+        details = [
+            {
+                "field": "areaCode",
+                "code": "UNKNOWN_SCHOOL_AREA",
+                "message": f"学校或区域不存在：{school_code}/{area_code}",
+            }
+            for school_code, area_code in unknown_areas
+        ]
+        raise ApiError(422, "IMPORT_VALIDATION_FAILED", "导入文件引用了不存在的学校或区域", details=details)
+
+    existing = {
+        store.store_code: store
+        for store in (await session.scalars(select(Store).where(Store.store_code.in_(codes)))).all()
+    }
     results = []
     try:
         for row_index, row in enumerate(rows, start=2):
             store = existing.get(row["storeCode"])
             action = "updated" if store else "created"
+            school_id, area_id = area_map[(row["schoolCode"], row["areaCode"])]
             if store is None:
-                store = Store(slug=row["storeCode"], name=row["name"], address=row["address"], status=row["status"])
+                store = Store(
+                    store_code=row["storeCode"],
+                    school_id=school_id,
+                    area_id=area_id,
+                    name=row["name"],
+                    address=row["address"],
+                    status=row["status"],
+                )
                 session.add(store)
                 await session.flush()
-                existing[store.slug] = store
+                existing[store.store_code] = store
             else:
+                store.school_id = school_id
+                store.area_id = area_id
                 store.name = row["name"]
                 store.address = row["address"]
                 store.status = row["status"]
@@ -109,7 +171,7 @@ async def import_stores(session: AsyncSession, storage: MinioStorage, settings: 
                 await attach_image(session, store, row["imageUrl"], storage)
             elif store.status == "active" and not store.images:
                 raise ApiError(422, "IMPORT_VALIDATION_FAILED", "已上架店铺必须提供图片", field="imageUrl")
-            results.append({"row": row_index, "store_code": store.slug, "store_id": str(store.id), "action": action})
+            results.append({"row": row_index, "store_code": store.store_code, "store_id": str(store.id), "action": action})
         await session.commit()
     except Exception:
         await session.rollback()

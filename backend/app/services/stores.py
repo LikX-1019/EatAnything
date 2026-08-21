@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ApiError
 from app.integrations.minio import MinioStorage
-from app.models import MediaObject, Store, StoreCategory, StoreImage
+from app.models import MediaObject, SchoolArea, Store, StoreCategory, StoreImage
 from app.models.entities import store_category_links
 from app.repositories import stores as store_repo
 from app.repositories.history import add_history
@@ -51,33 +51,39 @@ def categories_text(store: Store) -> str:
     return " · ".join(sorted((category.name for category in store.categories), key=str))
 
 
-def store_summary(store: Store, storage: MinioStorage, stats: tuple[float | None, int], state=None) -> dict:
-    score, review_count = stats
+def store_summary(store: Store, storage: MinioStorage, stats: store_repo.StoreStats, state=None) -> dict:
     return {
         "id": str(store.id),
-        "store_code": store.slug,
-        "school_id": str(store.school_id) if store.school_id is not None else None,
-        "school_code": store.school.school_code if store.school else None,
-        "school_name": store.school.name if store.school else None,
+        "store_code": store.store_code,
+        "school_id": str(store.school_id),
+        "school_code": store.school.school_code,
+        "school_name": store.school.name,
+        "area_id": str(store.area_id),
+        "area_code": store.area.area_code,
         "name": store.name,
         "category": categories_text(store),
         "address": store.address,
-        "area": store.area,
+        "area": store.area.name,
         "image_url": primary_image_url(store, storage),
-        "score": round(score, 1) if score is not None else None,
-        "review_count": review_count,
+        "score": round(stats.score, 1) if stats.score is not None else None,
+        "review_count": stats.review_count,
+        "favorite_count": stats.favorite_count,
         "is_favorite": bool(state and state.is_favorite),
         "is_eaten": bool(state and state.is_eaten),
     }
 
 
-def store_detail(store: Store, storage: MinioStorage, stats: tuple[float | None, int], state=None) -> dict:
+def store_detail(store: Store, storage: MinioStorage, stats: store_repo.StoreStats, state=None) -> dict:
     result = store_summary(store, storage, stats, state)
     result.update(
         {
             "description": store.description,
             "city": store.city,
             "district": store.district,
+            "latitude": float(store.latitude) if store.latitude is not None else None,
+            "longitude": float(store.longitude) if store.longitude is not None else None,
+            "phone": store.phone,
+            "business_hours": store.business_hours,
             "created_at": store.created_at.isoformat(),
             "updated_at": store.updated_at.isoformat(),
         }
@@ -113,7 +119,7 @@ async def user_store_page(
             return [], 0
         if keyword:
             pattern = f"%{keyword.strip()}%"
-            query = query.where(or_(Store.name.ilike(pattern), Store.address.ilike(pattern), Store.slug.ilike(pattern)))
+            query = query.where(or_(Store.name.ilike(pattern), Store.address.ilike(pattern), Store.store_code.ilike(pattern)))
         total = int((await session.scalar(select(__import__("sqlalchemy").func.count()).select_from(query.subquery()))) or 0)
         stores = list((await session.scalars(query.order_by(Store.updated_at.desc()).offset((page - 1) * page_size).limit(page_size))).all())
     else:
@@ -132,7 +138,7 @@ async def user_store_page(
     ids = [store.id for store in stores]
     stats = await store_repo.stats_for_stores(session, ids)
     states = await states_for_stores(session, user_id, ids)
-    return [store_summary(store, storage, stats.get(store.id, (None, 0)), states.get(store.id)) for store in stores], total
+    return [store_summary(store, storage, stats.get(store.id, store_repo.StoreStats()), states.get(store.id)) for store in stores], total
 
 
 async def get_user_store(session: AsyncSession, storage: MinioStorage, user_id: int, store_id: int) -> dict:
@@ -141,7 +147,7 @@ async def get_user_store(session: AsyncSession, storage: MinioStorage, user_id: 
         raise ApiError(404, "STORE_NOT_FOUND", "店铺不存在或已不可用")
     state = await states_for_stores(session, user_id, [store.id])
     stats = await store_repo.stats_for_stores(session, [store.id])
-    return store_detail(store, storage, stats.get(store.id, (None, 0)), state.get(store.id))
+    return store_detail(store, storage, stats.get(store.id, store_repo.StoreStats()), state.get(store.id))
 
 
 async def random_user_store(
@@ -164,7 +170,7 @@ async def random_user_store(
     history = await add_history(session, user_id=user_id, store_id=store.id, action="random_pick")
     await session.commit()
     state = (await states_for_stores(session, user_id, [store.id])).get(store.id)
-    stats = (await store_repo.stats_for_stores(session, [store.id])).get(store.id, (None, 0))
+    stats = (await store_repo.stats_for_stores(session, [store.id])).get(store.id, store_repo.StoreStats())
     return store_detail(store, storage, stats, state), str(history.id)
 
 
@@ -195,8 +201,21 @@ async def attach_image(session: AsyncSession, store: Store, image_url: str | Non
         linked.sort_order = 0
 
 
+async def require_school_area(session: AsyncSession, school_id: int, area_id: int) -> SchoolArea:
+    area = await session.scalar(
+        select(SchoolArea).where(
+            SchoolArea.id == area_id,
+            SchoolArea.school_id == school_id,
+            SchoolArea.status == "active",
+        )
+    )
+    if area is None:
+        raise ApiError(422, "INVALID_SCHOOL_AREA", "区域不存在或不属于所选学校", field="areaId")
+    return area
+
+
 async def admin_store_view(session: AsyncSession, storage: MinioStorage, store: Store) -> dict:
-    stats = (await store_repo.stats_for_stores(session, [store.id])).get(store.id, (None, 0))
+    stats = (await store_repo.stats_for_stores(session, [store.id])).get(store.id, store_repo.StoreStats())
     return {
         **store_summary(store, storage, stats),
         "status": store.status,
@@ -207,12 +226,13 @@ async def admin_store_view(session: AsyncSession, storage: MinioStorage, store: 
 
 
 async def create_admin_store(session: AsyncSession, storage: MinioStorage, payload) -> dict:
+    await require_school_area(session, payload.school_id, payload.area_id)
     store = Store(
-        slug=payload.store_code,
+        store_code=payload.store_code,
         school_id=payload.school_id,
+        area_id=payload.area_id,
         name=payload.name.strip(),
         address=payload.address.strip(),
-        area=payload.area.strip(),
         status=payload.status,
     )
     categories = await ensure_categories(session, payload.category)
@@ -232,12 +252,14 @@ async def update_admin_store(session: AsyncSession, storage: MinioStorage, store
         raise ApiError(409, "RESOURCE_VERSION_CONFLICT", "数据已被其他管理员修改，请刷新后重试")
     if payload.name is not None:
         store.name = payload.name.strip()
-    if "school_id" in payload.model_fields_set:
-        store.school_id = payload.school_id
+    target_school_id = payload.school_id if "school_id" in payload.model_fields_set else store.school_id
+    target_area_id = payload.area_id if "area_id" in payload.model_fields_set else store.area_id
+    if {"school_id", "area_id"} & payload.model_fields_set:
+        await require_school_area(session, target_school_id, target_area_id)
+        store.school_id = target_school_id
+        store.area_id = target_area_id
     if payload.address is not None:
         store.address = payload.address.strip()
-    if payload.area is not None:
-        store.area = payload.area.strip()
     if payload.category is not None:
         categories = await ensure_categories(session, payload.category)
         await replace_categories(session, store.id, categories)
