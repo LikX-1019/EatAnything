@@ -1,12 +1,12 @@
 # EatAnything 后端部署说明
 
-本文档描述后端在服务器上的 Docker Compose 部署方式，覆盖服务编排、环境变量、数据库初始化与日常运维命令。所有命令默认在仓库根目录执行。
+本文档描述后端在服务器上的 Docker Compose 部署方式，覆盖服务编排、环境变量、数据库初始化与日常运维命令。手工命令默认在仓库根目录执行；`deploy/scripts/deploy.sh` 可从任意目录调用。
 
 > 本阶段只标准化后端部署方式，不包含 HTTPS、CI/CD、监控、备份与前端发布；这些属于后续阶段，部署时请不要假定它们已经存在。
 
 ## 1. 环境要求
 
-- Linux 服务器（或本机 Docker Desktop），已安装 Docker Engine 24+ 与 Docker Compose v2（v2.17+，`docker compose` 子命令）。
+- Linux 服务器（或本机 Docker Desktop），已安装 Docker Engine 24+、Docker Compose v2（v2.17+，`docker compose` 子命令）与 GNU coreutils `timeout`。
 - 可访问外网以下载镜像：`python:3.12-slim`、`postgres:16-alpine`、`minio/minio:RELEASE.2025-04-22T22-12-26Z`、`minio/mc:RELEASE.2025-04-16T18-13-26Z`（镜像标签可通过 `deploy/.env` 覆盖）。
 - 默认占用宿主机端口：
   - `8000`：API（默认只绑定 `127.0.0.1`，通过 `API_BIND_HOST` / `API_PORT` 调整）
@@ -20,6 +20,8 @@ cp deploy/.env.example deploy/.env
 ```
 
 然后编辑 `deploy/.env` 填写真实值。`deploy/.env` 已被 `.gitignore` 忽略，不会进入 Git；`deploy/.env.example` 会进入 Git，只允许包含变量名和安全占位符。
+
+必须把模板中的 `COMPOSE_PROJECT_NAME=eatanything-example` 改为当前部署环境的唯一名称，例如 `eatanything-test`；未来 production 可以使用 `eatanything-prod`。该名称是 Compose 资源隔离的重要边界，脚本不会根据目录名推导，也没有默认值。进程显式设置的 `COMPOSE_PROJECT_NAME` 优先于 `deploy/.env`。当前 `POSTGRES_VOLUME`、`MINIO_VOLUME`、`NETWORK_NAME` 仍是显式资源名称，也必须与目标部署保持一致；本阶段不自动拆分 Test/Prod 资源。
 
 本文件与仓库根目录 `.env`（本机开发用）相互独立。Compose 网络内的服务通过服务名互相访问：
 
@@ -55,6 +57,8 @@ docker compose -f deploy/compose.yml --env-file deploy/.env.example config
 ```
 
 该命令只解析并渲染最终编排配置，不会启动任何服务。看到完整渲染结果（服务、卷、网络、环境变量）即表示语法正确。本机无 Docker daemon 时此命令仍可运行。
+
+`COMPOSE_PROJECT_NAME` 必须由当前进程或 `deploy/.env` 显式提供；缺失时 `compose.yml` 和部署脚本都会 fail closed。部署脚本通过 `--project-name` 显式传入最终值，确保无论从哪个目录执行，始终操作指定的一组容器、volume 与网络。变更 project 名称相当于切换到另一套 Compose 资源，生产环境不要随意修改。
 
 ## 5. 构建镜像
 
@@ -163,15 +167,73 @@ docker compose -f deploy/compose.yml --env-file deploy/.env run --rm minio-init 
 - `docker-entrypoint-initdb.d/` 中的 SQL 只在数据卷**第一次初始化（空目录）**时执行。之后修改 `001_schema.sql` / `002_seed.sql` 不会在已有卷上重放。
 - 因此，对已有部署的 schema 变更必须走 Alembic 增量迁移（见第 10 节），不要依赖修改 baseline。
 
-## 13. 更新部署流程
+## 13. 首次部署与日常升级
+
+**首次部署**需要人工复制并填写生产配置：
 
 ```bash
-git pull
-docker compose -f deploy/compose.yml --env-file deploy/.env build
-docker compose -f deploy/compose.yml --env-file deploy/.env up -d
+cp deploy/.env.example deploy/.env
+chmod 600 deploy/.env
+chmod +x deploy/scripts/deploy.sh
+# 编辑 deploy/.env，替换全部生产 Secret 和环境配置
+# 必须把 COMPOSE_PROJECT_NAME 改为当前部署环境的唯一名称
+./deploy/scripts/deploy.sh
 ```
 
-`db-init` 会在每次启动时自动把数据库升级到迁移链最新 head，因此升级顺序为“先更新代码镜像，再重启服务”。升级前建议先备份数据库（备份能力属于后续阶段，当前请自行确认）。
+**日常升级**直接执行：
+
+```bash
+./deploy/scripts/deploy.sh
+```
+
+脚本根据自身位置解析仓库根目录，不依赖当前工作目录。默认只允许部署 `main`；服务器使用其他明确分支时，必须显式指定，例如：
+
+```bash
+DEPLOY_BRANCH=release ./deploy/scripts/deploy.sh
+```
+
+脚本执行流程：
+
+1. 检查 `deploy/.env`、显式 `COMPOSE_PROJECT_NAME`、文件权限、`git`、`docker`、`docker compose`、`curl`、`timeout` 与 Docker daemon；
+2. 拒绝 dirty worktree、detached HEAD、当前分支与 `DEPLOY_BRANCH` 不一致等不安全状态；
+3. 在更新代码前执行第一次 `docker compose config --quiet`，无效配置立即停止；
+4. 执行 `git fetch --prune origin`，确认远端分支存在，再通过 `git merge --ff-only` 更新，并要求最终 `HEAD` 与远端提交完全一致；分叉或本地领先都会停止，绝不 force/reset；
+5. 更新后再次执行 `docker compose config --quiet`，只构建 `api` 镜像（`db-init` 共用该镜像），正常利用 Docker layer cache；
+6. 只启动或更新 `postgres`、`minio`，等待 `postgres` healthy、`minio` running，不触碰当前 `api`；
+7. 通过 `docker compose run --rm --no-deps minio-init` 显式执行本次 MinIO 初始化，命令在 120 秒内退出码为 0 才继续；
+8. 通过 `docker compose run --rm --no-deps db-init` 显式执行本次数据库迁移，复用 `backend/scripts/alembic_stamp_if_fresh.py`；命令在 120 秒内退出码为 0 才继续；
+9. migration 成功后才执行 `docker compose up -d --no-deps api`，并等待 `api` healthy；
+10. 通过 `docker compose port api ${API_CONTAINER_PORT}` 获取实际宿主机发布地址，请求 `/health/ready`，确认 HTTP 200 且 `status=ready` 后才报告成功。
+
+`minio-init` 和 `db-init` 使用 `run --rm`，命令成功退出就是本次部署的 one-shot PASS，不依赖历史 `Exited (0)` 容器。若 `db-init` 失败，脚本立即返回非 0，不会更新或主动停止已有 `api`，也不会自动回滚数据库、停止基础服务或重置 Git。
+
+默认健康等待超时为 120 秒，readiness 等待超时为 30 秒；必要时可显式调整：
+
+```bash
+HEALTH_TIMEOUT=180 READINESS_TIMEOUT=60 ./deploy/scripts/deploy.sh
+```
+
+正常构建使用 Docker layer cache。仅在人工确认确有需要时禁用缓存：
+
+```bash
+NO_CACHE=1 ./deploy/scripts/deploy.sh
+```
+
+部署前可执行 dry-run。它会完成依赖、环境文件、Git 状态和 Compose 配置检查，但不会 fetch/merge、build、up 或触发 migration：
+
+```bash
+DRY_RUN=1 ./deploy/scripts/deploy.sh
+```
+
+脚本明确不会：
+
+- 创建或输出 Secret；
+- 删除 volume 或把 `down` 作为升级步骤；
+- 自动回滚数据库；
+- 自动 checkout、stash、force reset 或清理 Git 工作区；
+- 在失败后自动恢复旧提交或停止现有服务。
+
+迁移可能已经在失败前完成，因此脚本失败时保留现场，输出 `compose ps -a` 和日志命令，由运维人员判断后续操作。
 
 ## 14. 正常停止服务
 
@@ -189,6 +251,26 @@ docker compose -f deploy/compose.yml --env-file deploy/.env down
 ## 15. 禁止随意 down -v
 
 `docker compose down -v` 会**删除 PostgreSQL 与 MinIO 的命名数据卷**，属于不可恢复操作，严禁加入普通部署/更新流程。只有确认要彻底销毁本地测试数据（且已经做好备份）时才允许执行。
+
+## 16. 部署失败诊断
+
+部署脚本会在构建或启动后的失败路径输出当前服务状态。也可以人工执行：
+
+```bash
+docker compose -f deploy/compose.yml --env-file deploy/.env ps -a
+docker compose -f deploy/compose.yml --env-file deploy/.env logs api --tail=200
+docker compose -f deploy/compose.yml --env-file deploy/.env logs postgres --tail=200
+docker compose -f deploy/compose.yml --env-file deploy/.env logs minio --tail=200
+```
+
+`minio-init`、`db-init` 由部署脚本使用 `run --rm` 执行，不保留 one-shot 容器；其本次输出直接保留在部署终端中。
+
+检查 Git 状态和当前版本：
+
+```bash
+git status --short --branch
+git log -1 --oneline
+```
 
 ## 服务清单
 
@@ -215,5 +297,7 @@ deploy/
 ├── compose.yml         # 编排定义
 ├── .env.example        # 环境变量模板（提交 Git）
 ├── .env                # 真实配置（不提交 Git）
+├── scripts/
+│   └── deploy.sh       # 安全的一键部署/升级脚本
 └── README.md           # 本文档
 ```

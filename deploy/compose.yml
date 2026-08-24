@@ -5,7 +5,7 @@
 #   docker compose --env-file deploy/.env up -d --build
 #
 # 所有密钥通过 deploy/.env 注入，本文件不包含任何真实 Secret。
-name: eat-anything
+name: ${COMPOSE_PROJECT_NAME:?请显式设置 COMPOSE_PROJECT_NAME}
 
 x-api-env: &api_env
   APP_ENV: ${APP_ENV:-development}
