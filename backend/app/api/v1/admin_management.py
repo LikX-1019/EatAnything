@@ -446,6 +446,7 @@ async def list_admin_reviews(
     session: SessionDep,
     school_id: int | None = Query(default=None, gt=0),
     store_id: int | None = Query(default=None, gt=0),
+    user_id: int | None = Query(default=None, gt=0),
     keyword: str | None = Query(default=None, max_length=100),
     status: str | None = Query(default=None, pattern="^(published|hidden)$"),
     page: int = Query(default=1, ge=1),
@@ -460,6 +461,8 @@ async def list_admin_reviews(
         filters.append(Store.school_id.in_(scope or {-1}))
     if store_id:
         filters.append(Review.store_id == store_id)
+    if user_id:
+        filters.append(Review.user_id == user_id)
     if status:
         filters.append(Review.status == status)
     if keyword:
@@ -528,6 +531,7 @@ async def list_admin_check_ins(
     session: SessionDep,
     school_id: int | None = Query(default=None, gt=0),
     store_id: int | None = Query(default=None, gt=0),
+    user_id: int | None = Query(default=None, gt=0),
     status: str | None = Query(default=None, pattern="^(published|hidden)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -541,6 +545,8 @@ async def list_admin_check_ins(
         filters.append(CheckIn.school_id.in_(scope or {-1}))
     if store_id:
         filters.append(CheckIn.store_id == store_id)
+    if user_id:
+        filters.append(CheckIn.user_id == user_id)
     if status:
         filters.append(CheckIn.status == status)
     total = int((await session.scalar(select(func.count(CheckIn.id)).where(*filters))) or 0)
