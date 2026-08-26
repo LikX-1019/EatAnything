@@ -22,7 +22,8 @@ onMounted(async () => {
   document.documentElement.dataset.font = workspace.fontMode
   if (!auth.admin) await auth.load()
   await workspace.loadSchools()
-  if (!auth.admin?.isPlatformAdmin && auth.admin?.schools.length === 1) workspace.schoolId = auth.admin.schools[0].id
+  // 学校管理员的学校范围由后端返回，界面固定到其第一个绑定学校，不能切换到其他学校。
+  if (!auth.admin?.isPlatformAdmin) workspace.schoolId = auth.admin?.schools[0]?.id || ''
 })
 </script>
 
