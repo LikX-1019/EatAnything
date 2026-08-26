@@ -13,7 +13,7 @@ const form=reactive({storeCode:'',schoolId:'',areaId:'',name:'',category:'',addr
 const isPlatformAdmin=()=>Boolean(auth.admin?.isPlatformAdmin)
 const currentSchoolName=()=>workspace.schools.find(item=>item.id===workspace.schoolId)?.name || '未绑定学校'
 const selectedSchool=()=>workspace.schools.find(item=>item.id===form.schoolId)
-function displayImageUrl(value?:string){if(!value)return '';try{const parsed=new URL(value,window.location.origin);if(parsed.pathname.startsWith('/media/'))return `${parsed.pathname}${parsed.search}`;return value}catch{return value}}
+function displayImageUrl(value?:string){if(!value)return '';try{const parsed=new URL(value,window.location.origin);if(window.location.protocol==='https:'&&parsed.protocol==='http:'&&parsed.pathname.startsWith('/media/'))return `${parsed.pathname}${parsed.search}`;return value}catch{return value}}
 async function load(){loading.value=true;try{const data=await api.get<PageData<StoreItem>>('/admin/stores',{...filters,schoolId:workspace.schoolId});rows.value=data.items;total.value=data.total}finally{loading.value=false}}
 function reset(){editingId.value='';Object.assign(form,{storeCode:'',schoolId:workspace.schoolId,areaId:'',name:'',category:'',address:'',imageUrl:'',status:'hidden',version:1});dialog.value=true}
 function edit(item:StoreItem){editingId.value=item.id;Object.assign(form,{storeCode:item.storeCode,schoolId:item.schoolId,areaId:item.areaId,name:item.name,category:item.category,address:item.address,imageUrl:item.imageUrl||'',status:item.status,version:item.version});dialog.value=true}
