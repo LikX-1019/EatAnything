@@ -22,6 +22,7 @@ from app.models import (
     School,
     SchoolArea,
     Store,
+    UserFavorite,
     UserRestriction,
 )
 from app.schemas.common import SchemaBase
@@ -344,8 +345,9 @@ async def get_admin_user(user_id: int, request: Request, admin: AdminDep, sessio
         raise ApiError(404, "USER_NOT_FOUND", "用户不存在")
     if user.school_id:
         await ensure_school_allowed(session, admin, user.school_id)
-    reviews = list((await session.scalars(select(Review).where(Review.user_id == user.id).order_by(Review.created_at.desc()).limit(20))).all())
-    check_ins = list((await session.scalars(select(CheckIn).where(CheckIn.user_id == user.id).order_by(CheckIn.checked_at.desc()).limit(20))).all())
+    reviews = list((await session.scalars(select(Review).where(Review.user_id == user.id).order_by(Review.created_at.desc()))).all())
+    check_ins = list((await session.scalars(select(CheckIn).where(CheckIn.user_id == user.id).order_by(CheckIn.checked_at.desc()))).all())
+    favorite_count = int((await session.scalar(select(func.count(UserFavorite.store_id)).where(UserFavorite.user_id == user.id))) or 0)
     return response(
         request,
         {
@@ -356,11 +358,13 @@ async def get_admin_user(user_id: int, request: Request, admin: AdminDep, sessio
             "school_name": user.school.name if user.school else None,
             "status": user.status,
             "level": user.level,
+            "slogan": user.slogan,
             "created_at": user.created_at,
             "last_login_at": user.last_login_at,
             "restriction": _restriction_view(await session.get(UserRestriction, user.id)),
-            "reviews": [{"id": str(item.id), "content": item.content, "rating": item.rating, "status": item.status, "created_at": item.created_at} for item in reviews],
-            "check_ins": [{"id": str(item.id), "store_id": str(item.store_id), "note": item.note, "status": item.status, "checked_at": item.checked_at} for item in check_ins],
+            "stats": {"favorite_count": favorite_count, "review_count": len(reviews), "check_in_count": len(check_ins)},
+            "reviews": [{"id": str(item.id), "content": item.content, "rating": item.rating, "status": item.status, "moderation_reason": item.moderation_reason, "store_id": str(item.store_id), "store_name": item.store.name, "created_at": item.created_at} for item in reviews],
+            "check_ins": [{"id": str(item.id), "store_id": str(item.store_id), "store_name": item.store.name, "photo_url": f"/api/v1/admin/check-ins/{item.id}/photo", "note": item.note, "status": item.status, "moderation_reason": item.moderation_reason, "checked_at": item.checked_at} for item in check_ins],
         },
     )
 
