@@ -71,7 +71,7 @@ async def import_store_file(
     session: SessionDep,
     settings: SettingsDep,
     file: UploadFile = File(...),
-    school_id: int | None = Form(default=None),
+    school_id: int | None = Form(default=None, alias="schoolId"),
     storage: MinioStorage = Depends(get_minio),
 ):
     content = await file.read(settings.max_upload_bytes + 1)
