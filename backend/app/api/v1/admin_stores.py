@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from sqlalchemy import select
 
 from app.api.v1.utils import response, store_id as parse_store_id
@@ -71,10 +71,13 @@ async def import_store_file(
     session: SessionDep,
     settings: SettingsDep,
     file: UploadFile = File(...),
+    school_id: int | None = Form(default=None),
     storage: MinioStorage = Depends(get_minio),
 ):
     content = await file.read(settings.max_upload_bytes + 1)
-    data = await import_stores(session, storage, settings, content, file.filename or "", allowed_school_ids=await admin_school_ids(session, admin))
+    if school_id is not None:
+        await ensure_school_allowed(session, admin, school_id)
+    data = await import_stores(session, storage, settings, content, file.filename or "", allowed_school_ids=await admin_school_ids(session, admin), target_school_id=school_id)
     add_audit_log(session, request, admin, action="store.import", target_type="store_import", target_id=file.filename or "upload", reason=f"新增 {data['created_count']}，更新 {data['updated_count']}", after={"totalRows": data["total_rows"]})
     await session.commit()
     return response(request, data)
