@@ -638,7 +638,7 @@ paths:
       summary: 批量导入店铺
       description: |
         接受最大 5 MB、最多 1000 条数据的 CSV/XLSX 文件。
-        以 storeCode 原子新增或更新，任意校验错误时整批不写入。
+        通过 schoolId 选择目标学校，中文模板仅包含食堂、店铺位置、店铺名称、店铺图片四列；系统自动生成店铺编码并原子新增或更新，任意校验错误时整批不写入。
         详细字段规则见 store-import-spec.md。
       requestBody:
         required: true
@@ -646,11 +646,15 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [file]
+              required: [file, schoolId]
               properties:
                 file:
                   type: string
                   format: binary
+                schoolId:
+                  type: integer
+                  minimum: 1
+                  description: 目标学校 ID，学校管理员只能填写已绑定学校
       responses:
         '200':
           description: 导入成功
