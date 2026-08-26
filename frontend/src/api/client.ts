@@ -2,7 +2,7 @@ import { clearAccessToken, getAccessToken } from '@/auth/token'
 import { env } from '@/config/env'
 import { ApiClientError, type ApiErrorDetail, type ApiResponse } from './types'
 
-export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE'
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 export type RequestHeaders = Record<string, string>
 
 export interface RequestOptions<TData = unknown> {
@@ -144,6 +144,9 @@ export interface UploadOptions {
   name?: string
   formData?: Record<string, string>
   timeout?: number
+  headers?: RequestHeaders
+  auth?: boolean
+  skipAuthRefresh?: boolean
 }
 
 function sendRequest<TData>(options: RequestOptions<TData>, token: string | null): Promise<TransportResult> {
@@ -159,7 +162,7 @@ function sendRequest<TData>(options: RequestOptions<TData>, token: string | null
   return new Promise((resolve, reject) => {
     uni.request({
       url: joinUrl(env.apiBaseUrl, options.url),
-      method: options.method ?? 'GET',
+      method: options.method as unknown as UniNamespace.RequestOptions['method'] ?? 'GET',
       data: options.data as UniNamespace.RequestOptions['data'],
       header: headers,
       timeout: options.timeout ?? DEFAULT_API_TIMEOUT,
@@ -227,6 +230,10 @@ export function post<T, TData = unknown>(url: string, data?: TData, options: Req
   return request<T, TData>({ ...options, url, method: 'POST', data })
 }
 
+export function patch<T, TData = unknown>(url: string, data?: TData, options: RequestOverrides<TData> = {}): Promise<T> {
+  return request<T, TData>({ ...options, url, method: 'PATCH', data })
+}
+
 export function put<T, TData = unknown>(url: string, data?: TData, options: RequestOverrides<TData> = {}): Promise<T> {
   return request<T, TData>({ ...options, url, method: 'PUT', data })
 }
@@ -247,7 +254,7 @@ function sendUpload(options: UploadOptions, token: string | null): Promise<Uploa
       filePath: options.filePath,
       name: options.name ?? 'file',
       formData: options.formData,
-      header: token ? { Authorization: `Bearer ${token}` } : {},
+      header: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers ?? {}) },
       timeout: options.timeout ?? DEFAULT_UPLOAD_TIMEOUT,
       success: (response) => resolve({
         data: normalizeResponseData(response.data),
@@ -259,14 +266,14 @@ function sendUpload(options: UploadOptions, token: string | null): Promise<Uploa
 }
 
 async function executeUpload<T>(options: UploadOptions, retryCount: number): Promise<T> {
-  const tokenUsed = getAccessToken()
+  const tokenUsed = options.auth === false ? null : getAccessToken()
   const response = await sendUpload(options, tokenUsed)
   if (response.statusCode >= 200 && response.statusCode < 300) {
     if (response.statusCode === 204) return undefined as T
     return unwrapApiResponse<T>(response.data, response.statusCode)
   }
 
-  if (response.statusCode === 401 && retryCount === 0) {
+  if (response.statusCode === 401 && retryCount === 0 && options.auth !== false && options.skipAuthRefresh !== true) {
     if (!authRefreshHandler) {
       clearAccessToken()
       throw new ApiClientError('Authentication refresh is not configured', {
@@ -285,6 +292,6 @@ async function executeUpload<T>(options: UploadOptions, retryCount: number): Pro
   throw toApiClientError(response.data, response.statusCode)
 }
 
-export function uploadFile<T>(url: string, filePath: string, formData?: Record<string, string>): Promise<T> {
-  return executeUpload<T>({ url, filePath, formData }, 0)
+export function uploadFile<T>(url: string, filePath: string, formData?: Record<string, string>, headers?: RequestHeaders, options: Pick<UploadOptions, 'auth' | 'skipAuthRefresh'> = {}): Promise<T> {
+  return executeUpload<T>({ url, filePath, formData, headers, ...options }, 0)
 }

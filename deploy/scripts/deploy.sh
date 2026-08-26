@@ -329,12 +329,18 @@ main() {
     CURRENT_STEP="重新校验更新后的 Compose 配置"
     "${COMPOSE[@]}" config --quiet
 
-    CURRENT_STEP="构建 API 镜像"
+    CURRENT_STEP="构建 API 与 Web 管理后台镜像"
     if [[ "${NO_CACHE}" == "1" ]]; then
         build_args+=(--no-cache)
     fi
-    log "构建 api 镜像（db-init 与 api 共用该镜像）..."
-    "${COMPOSE[@]}" "${build_args[@]}" api
+    log "构建 api 与 admin-web 镜像（db-init 与 api 共用 API 镜像）..."
+    "${COMPOSE[@]}" "${build_args[@]}" api admin-web
+
+    if [[ "$(read_env_value APP_ENV || true)" == "production" || "$(read_env_value APP_ENV || true)" == "prod" ]]; then
+        CURRENT_STEP="生产配置预检"
+        log "执行生产配置预检（不输出 Secret）..."
+        "${COMPOSE[@]}" run --rm --no-deps db-init python /app/scripts/validate_production_config.py
+    fi
 
     CURRENT_STEP="启动基础服务"
     log "启动或更新 postgres 与 minio（保留现有 volume，不更新 api）..."
@@ -358,6 +364,11 @@ main() {
 
     CURRENT_STEP="等待 API 健康状态"
     wait_for_healthy api
+
+    CURRENT_STEP="启动或更新 Web 管理后台"
+    log "API 已健康，开始启动或更新 admin-web..."
+    "${COMPOSE[@]}" up -d --no-deps admin-web
+    wait_for_healthy admin-web
 
     CURRENT_STEP="解析 API 发布地址"
     api_container_port="${API_CONTAINER_PORT:-$(read_env_value API_CONTAINER_PORT || true)}"
@@ -387,6 +398,7 @@ main() {
     printf 'minio-init: passed\n'
     printf 'db-init: passed\n'
     printf 'api: healthy\n\n'
+    printf 'admin-web: healthy\n\n'
     printf 'readiness: HTTP 200, status=ready\n'
     printf '================================\n'
 }

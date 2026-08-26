@@ -56,6 +56,6 @@ async def record_visit(storeId: str, request: Request, user: UserDep, session: S
     store = await get_store(session, sid, active_only=True)
     if store is None:
         raise ApiError(404, "STORE_NOT_FOUND", "店铺不存在或已不可用")
-    item = await add_history(session, user_id=user.id, store_id=sid, action="store_view")
+    item = await add_history(session, user_id=user.id, store_id=sid, action="confirmed_pick")
     await session.commit()
-    return response(request, {"id": str(item.id), "action": "DETAIL_VIEW", "store_id": str(sid)})
+    return response(request, {"id": str(item.id), "action": "CONFIRMED_PICK", "store_id": str(sid)})

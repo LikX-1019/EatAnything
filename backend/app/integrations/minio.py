@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 import anyio
 from minio import Minio
+from minio.commonconfig import CopySource
 
 from app.core.config import Settings
 
@@ -12,6 +13,7 @@ from app.core.config import Settings
 class MinioStorage:
     def __init__(self, settings: Settings) -> None:
         self.bucket = settings.minio_bucket
+        self.private_bucket = settings.minio_private_bucket
         self.public_url = settings.minio_public_url.rstrip("/")
         self.client = Minio(
             settings.minio_endpoint,
@@ -20,13 +22,13 @@ class MinioStorage:
             secure=settings.minio_secure,
         )
 
-    async def bucket_exists(self) -> bool:
-        return await anyio.to_thread.run_sync(self.client.bucket_exists, self.bucket)
+    async def bucket_exists(self, bucket: str | None = None) -> bool:
+        return await anyio.to_thread.run_sync(self.client.bucket_exists, bucket or self.bucket)
 
-    async def put_bytes(self, object_key: str, content: bytes, content_type: str) -> None:
+    async def put_bytes(self, object_key: str, content: bytes, content_type: str, *, bucket: str | None = None) -> None:
         def upload() -> None:
             self.client.put_object(
-                self.bucket,
+                bucket or self.bucket,
                 object_key,
                 BytesIO(content),
                 length=len(content),
@@ -35,8 +37,27 @@ class MinioStorage:
 
         await anyio.to_thread.run_sync(upload)
 
-    async def remove(self, object_key: str) -> None:
-        await anyio.to_thread.run_sync(self.client.remove_object, self.bucket, object_key)
+    async def remove(self, object_key: str, *, bucket: str | None = None) -> None:
+        await anyio.to_thread.run_sync(self.client.remove_object, bucket or self.bucket, object_key)
+
+    async def get_bytes(self, object_key: str, *, bucket: str | None = None) -> tuple[bytes, str | None]:
+        def download() -> tuple[bytes, str | None]:
+            response = self.client.get_object(bucket or self.bucket, object_key)
+            try:
+                return response.read(), response.headers.get("Content-Type")
+            finally:
+                response.close()
+                response.release_conn()
+
+        return await anyio.to_thread.run_sync(download)
+
+    async def copy_object(self, object_key: str, *, source_bucket: str, target_bucket: str) -> None:
+        await anyio.to_thread.run_sync(
+            self.client.copy_object,
+            target_bucket,
+            object_key,
+            CopySource(source_bucket, object_key),
+        )
 
     def public_object_url(self, object_key: str) -> str:
         encoded_key = "/".join(quote(part, safe="") for part in object_key.split("/"))

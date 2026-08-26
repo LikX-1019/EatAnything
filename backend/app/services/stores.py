@@ -11,7 +11,6 @@ from app.integrations.minio import MinioStorage
 from app.models import MediaObject, SchoolArea, Store, StoreCategory, StoreImage
 from app.models.entities import store_category_links
 from app.repositories import stores as store_repo
-from app.repositories.history import add_history
 from app.repositories.states import states_for_stores
 
 
@@ -167,11 +166,10 @@ async def random_user_store(
     store = await store_repo.get_store(session, store_id, active_only=True)
     if store is None:
         raise ApiError(404, "STORE_POOL_EMPTY", "暂无可选店铺")
-    history = await add_history(session, user_id=user_id, store_id=store.id, action="random_pick")
-    await session.commit()
     state = (await states_for_stores(session, user_id, [store.id])).get(store.id)
     stats = (await store_repo.stats_for_stores(session, [store.id])).get(store.id, store_repo.StoreStats())
-    return store_detail(store, storage, stats, state), str(history.id)
+    # 抽签结果只有在用户点击“就吃这家！”后才写入历史，避免普通浏览污染记录。
+    return store_detail(store, storage, stats, state), ""
 
 
 async def attach_image(session: AsyncSession, store: Store, image_url: str | None, storage: MinioStorage) -> None:

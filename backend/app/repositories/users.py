@@ -37,7 +37,12 @@ async def user_stats(session: AsyncSession, user_id: int) -> dict[str, int]:
     favorite_count = await count_user_favorites(session, user_id)
     checkin_count = await count_user_check_ins(session, user_id)
     review_count = await session.scalar(select(func.count()).select_from(Review).where(Review.user_id == user_id))
-    history_count = await session.scalar(select(func.count()).select_from(ActivityHistory).where(ActivityHistory.user_id == user_id))
+    history_count = await session.scalar(
+        select(func.count()).select_from(ActivityHistory).where(
+            ActivityHistory.user_id == user_id,
+            ActivityHistory.action == "confirmed_pick",
+        )
+    )
     return {
         "favorite_count": favorite_count,
         "eaten_count": checkin_count,

@@ -6,7 +6,7 @@ def history_view(item, storage: MinioStorage) -> dict:
     store = item.store
     return {
         "id": str(item.id),
-        "action": "RANDOM_PICK" if item.action == "random_pick" else "DETAIL_VIEW",
+        "action": "CONFIRMED_PICK" if item.action == "confirmed_pick" else item.action.upper(),
         "occurred_at": item.occurred_at,
         "store": {
             "id": str(store.id),

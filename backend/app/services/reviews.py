@@ -13,12 +13,12 @@ from app.repositories.reviews import (
 from app.repositories.states import latest_check_in
 from app.repositories.stores import get_store
 from app.services.stores import categories_text, primary_image_url
+from app.services.moderation import ensure_user_can_comment
 
 
 def reviewer_view(review: Review, storage: MinioStorage) -> dict:
+    # 评价列表不能泄漏用户私有头像对象地址，前端使用首字母占位。
     avatar_url = None
-    if review.user.avatar:
-        avatar_url = storage.public_object_url(review.user.avatar.object_key)
     return {
         "id": str(review.id),
         "store_id": str(review.store_id),
@@ -57,6 +57,7 @@ def my_review_view(review: Review, storage: MinioStorage) -> dict:
 
 
 async def upsert_review(session: AsyncSession, storage: MinioStorage, user_id: int, store_id: int, rating: int, content: str) -> dict:
+    await ensure_user_can_comment(session, user_id)
     store = await get_store(session, store_id, active_only=False)
     if store is None or store.status == "closed":
         raise ApiError(404, "STORE_NOT_FOUND", "店铺不存在或已关闭")
@@ -74,7 +75,9 @@ async def upsert_review(session: AsyncSession, storage: MinioStorage, user_id: i
     else:
         existing.rating = rating
         existing.content = content.strip()
-        existing.status = "published"
+        # 管理员隐藏的评价不能通过用户编辑自行恢复。
+        if existing.status != "hidden":
+            existing.status = "published"
     await session.commit()
     await session.refresh(existing)
     return my_review_view(existing, storage)

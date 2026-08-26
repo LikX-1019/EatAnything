@@ -170,8 +170,13 @@ class CheckIn(Base):
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("app_users.id", ondelete="CASCADE"))
     store_id: Mapped[int] = mapped_column(ForeignKey("stores.id", ondelete="CASCADE"))
+    school_id: Mapped[int] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"))
     photo_media_id: Mapped[int] = mapped_column(ForeignKey("media_objects.id", ondelete="RESTRICT"), unique=True)
     note: Mapped[str | None] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(String(20), server_default=text("'published'"))
+    moderation_reason: Mapped[str | None] = mapped_column(String(500))
+    moderated_by: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    moderated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
@@ -190,6 +195,9 @@ class Review(Base):
     content: Mapped[str] = mapped_column(Text)
     visited_at: Mapped[date | None] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(20), server_default=text("'published'"))
+    moderation_reason: Mapped[str | None] = mapped_column(String(500))
+    moderated_by: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    moderated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
     user: Mapped[AppUser] = relationship(lazy="joined")
@@ -219,3 +227,39 @@ class AdminUser(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+
+class AdminUserSchool(Base):
+    __tablename__ = "admin_user_schools"
+    admin_user_id: Mapped[int] = mapped_column(ForeignKey("admin_users.id", ondelete="CASCADE"), primary_key=True)
+    school_id: Mapped[int] = mapped_column(ForeignKey("schools.id", ondelete="CASCADE"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+
+class UserRestriction(Base):
+    __tablename__ = "user_restrictions"
+    user_id: Mapped[int] = mapped_column(ForeignKey("app_users.id", ondelete="CASCADE"), primary_key=True)
+    comment_blocked: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    comment_block_reason: Mapped[str | None] = mapped_column(String(500))
+    comment_blocked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    image_upload_blocked: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    image_upload_block_reason: Mapped[str | None] = mapped_column(String(500))
+    image_upload_blocked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_logs"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    admin_user_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    school_id: Mapped[int | None] = mapped_column(ForeignKey("schools.id", ondelete="SET NULL"))
+    action: Mapped[str] = mapped_column(String(80))
+    target_type: Mapped[str] = mapped_column(String(50))
+    target_id: Mapped[str] = mapped_column(String(100))
+    reason: Mapped[str | None] = mapped_column(String(500))
+    before_data: Mapped[dict | None] = mapped_column(JSONB)
+    after_data: Mapped[dict | None] = mapped_column(JSONB)
+    ip_address: Mapped[str | None] = mapped_column(String(64))
+    user_agent: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))

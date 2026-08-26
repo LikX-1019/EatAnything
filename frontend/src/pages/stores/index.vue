@@ -28,8 +28,9 @@ let searchSequence = 0
 const scopedStores = computed(() => {
   const schoolId = userStore.profile?.schoolId
   const area = appStore.activeArea?.name
+  const isAllAreas = appStore.selectedAreaId === '__all__'
   const source = searchResults.value ?? appStore.activeSchoolStores
-  return source.filter((store) => store.schoolId === schoolId && (!area || store.area.trim() === area))
+  return source.filter((store) => store.schoolId === schoolId && (isAllAreas || !area || store.area.trim() === area))
 })
 const filteredStores = computed(() => {
   let list = scopedStores.value

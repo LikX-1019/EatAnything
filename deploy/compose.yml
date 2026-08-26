@@ -24,10 +24,14 @@ x-api-env: &api_env
   MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
   MINIO_BUCKET: ${MINIO_BUCKET:-eat-anything}
+  MINIO_PRIVATE_BUCKET: ${MINIO_PRIVATE_BUCKET:-eat-anything-private}
   MINIO_SECURE: ${MINIO_SECURE:-false}
   MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
   MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-5242880}
   CORS_ORIGINS: ${CORS_ORIGINS:-}
+  METRICS_ENABLED: ${METRICS_ENABLED:-true}
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
+  TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
   SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
 
 services:
@@ -71,7 +75,7 @@ services:
     # - 已有 alembic_version：直接 alembic upgrade head。
     # - 全新数据卷：postgres 已在 docker-entrypoint-initdb.d 执行 baseline，
     #   脚本先校验 baseline 关键 schema 特征（fail closed），通过后
-    #   alembic stamp 0005_store_catalog，再 alembic upgrade head，
+    #   alembic stamp 0006_admin_governance，再 alembic upgrade head，
     #   保证未来新增 0006/0007 迁移时全新库会真正执行增量。
     command: ["python", "/app/scripts/alembic_stamp_if_fresh.py"]
     restart: "no"
@@ -105,6 +109,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: ${MINIO_BUCKET:-eat-anything}
+      MINIO_PRIVATE_BUCKET: ${MINIO_PRIVATE_BUCKET:-eat-anything-private}
       MINIO_SECURE: ${MINIO_SECURE:-false}
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -116,8 +121,10 @@ services:
         done
         # --ignore-existing 保证幂等：bucket 已存在时直接成功退出
         mc mb --ignore-existing "local/$${MINIO_BUCKET}"
-        # 本阶段保持前端直读图片：bucket 设为公开读（幂等），不允许匿名写
+        mc mb --ignore-existing "local/$${MINIO_PRIVATE_BUCKET}"
+        # 只有店铺公开素材 bucket 允许匿名读取；用户媒体 bucket 保持私有。
         mc anonymous set download "local/$${MINIO_BUCKET}"
+        mc anonymous set none "local/$${MINIO_PRIVATE_BUCKET}"
         echo "MinIO bucket 初始化完成"
     # 成功退出属于正常状态（Exited (0)）
     restart: "no"
@@ -156,6 +163,26 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - eatanything
+
+  admin-web:
+    image: ${ADMIN_WEB_IMAGE:-eat-anything-admin-web:local}
+    build:
+      context: ../admin-web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${ADMIN_WEB_BIND_HOST:-127.0.0.1}:${ADMIN_WEB_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/admin/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     networks:
       - eatanything
 

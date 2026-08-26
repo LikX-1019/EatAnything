@@ -81,6 +81,6 @@ export function getStoreDetail(storeId: string): Promise<StoreDetail> {
   return get<StoreDetail>(`/stores/${encodeURIComponent(storeId)}`)
 }
 
-export function recordStoreVisit(storeId: string): Promise<{ id: string; action: string; storeId: string }> {
+export function confirmStoreChoice(storeId: string): Promise<{ id: string; action: string; storeId: string }> {
   return post<{ id: string; action: string; storeId: string }>(`/stores/${encodeURIComponent(storeId)}/visits`)
 }

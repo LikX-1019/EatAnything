@@ -14,7 +14,7 @@ export interface HistoryStoreSnapshot {
 
 export interface HistoryRecord {
   id: string
-  action: 'RANDOM_PICK' | 'DETAIL_VIEW' | string
+  action: 'CONFIRMED_PICK' | string
   occurredAt: string
   store: HistoryStoreSnapshot
 }

@@ -7,9 +7,9 @@
     2. 校验失败：fail closed，返回非 0，不执行任何 stamp/upgrade；
     3. 校验成功：`alembic stamp BASELINE_REVISION`，再继续 `alembic upgrade head`。
 
-baseline 对应的明确 revision 是 0005_store_catalog。全新库初始化
+baseline 对应的明确 revision 是 0006_admin_governance。全新库初始化
 必须 stamp 到这个固定 revision，禁止用不指定 revision 的动态 stamp，
-否则未来新增 0006/0007 迁移时会被错误跳过。
+否则未来新增 0007/0008 迁移时会被错误跳过。
 """
 
 from __future__ import annotations
@@ -27,13 +27,16 @@ from alembic import command
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 ALEMBIC_INI = BACKEND_ROOT / "alembic.ini"
 # 001_schema.sql baseline 对应的明确 Alembic revision
-BASELINE_REVISION = "0005_store_catalog"
+BASELINE_REVISION = "0006_admin_governance"
 
 # baseline 关键 schema 特征：全部通过才允许 stamp，否则 fail closed
 BASELINE_FINGERPRINT = (
     ("admin_users 表存在", "SELECT to_regclass('public.admin_users') IS NOT NULL"),
     ("school_areas 表存在", "SELECT to_regclass('public.school_areas') IS NOT NULL"),
     ("check_ins 表存在", "SELECT to_regclass('public.check_ins') IS NOT NULL"),
+    ("admin_user_schools 表存在", "SELECT to_regclass('public.admin_user_schools') IS NOT NULL"),
+    ("user_restrictions 表存在", "SELECT to_regclass('public.user_restrictions') IS NOT NULL"),
+    ("admin_audit_logs 表存在", "SELECT to_regclass('public.admin_audit_logs') IS NOT NULL"),
     (
         "stores.store_code 列存在",
         "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'stores' AND column_name = 'store_code')",

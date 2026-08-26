@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { STORE_IMAGE_FALLBACK } from '../utils/store'
+import { getAccessToken } from '../auth/token'
+import { env } from '../config/env'
 
 declare const wx: { env: { USER_DATA_PATH: string } }
 
@@ -24,11 +26,13 @@ function downloadImage(source: string): Promise<string> {
     }
     const filePath = `${wx.env.USER_DATA_PATH}/store-image-${(hash >>> 0).toString(16)}.${extension}`
 
+    const accessToken = getAccessToken()
     uni.request({
       url: source,
       method: 'GET',
       timeout: DOWNLOAD_TIMEOUT,
       responseType: 'arraybuffer',
+      header: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       success: (response) => {
         if (response.statusCode < 200 || response.statusCode >= 300) {
           reject(new Error(`图片请求失败，HTTP 状态码：${response.statusCode}`))
@@ -62,6 +66,13 @@ function downloadImage(source: string): Promise<string> {
 }
 
 async function resolveImageSource(source: string): Promise<string> {
+  if (source.startsWith('/api/v1')) {
+    const absoluteSource = `${env.apiBaseUrl}${source.slice('/api/v1'.length)}`
+    // #ifdef MP-WEIXIN
+    return downloadImage(absoluteSource)
+    // #endif
+    return absoluteSource
+  }
   // 微信开发版的 image 组件可能拒绝 HTTP 网络图片，先下载为临时文件再渲染。
   // #ifdef MP-WEIXIN
   if (/^http:\/\//i.test(source)) return downloadImage(source)
@@ -74,6 +85,10 @@ const props = withDefaults(defineProps<{ src?: string | null; fallback?: string;
   fallback: STORE_IMAGE_FALLBACK,
   mode: 'aspectFill',
 })
+const emit = defineEmits<{
+  resolved: [source: string]
+  tap: []
+}>()
 const currentSource = ref('')
 const failed = ref(false)
 let sourceVersion = 0
@@ -86,7 +101,10 @@ watch(() => props.src, async (value) => {
 
   try {
     const resolvedSource = await resolveImageSource(source)
-    if (version === sourceVersion) currentSource.value = resolvedSource
+    if (version === sourceVersion) {
+      currentSource.value = resolvedSource
+      emit('resolved', resolvedSource)
+    }
   } catch (error) {
     if (version !== sourceVersion) return
     failed.value = true
@@ -102,10 +120,14 @@ function handleError() {
 function handleLoad() {
   if (import.meta.env.DEV) console.info('[店铺图片] 渲染成功', props.src)
 }
+
+function handleTap() {
+  emit('tap')
+}
 </script>
 
 <template>
-  <view class="fallback-image">
+  <view class="fallback-image" @tap="handleTap">
     <image v-if="currentSource && !failed" class="fallback-image__content" :src="currentSource" :mode="mode" @load="handleLoad" @error="handleError" />
     <view v-else class="fallback-image__state">
       <text>{{ failed ? '图片暂不可用' : '图片加载中…' }}</text>

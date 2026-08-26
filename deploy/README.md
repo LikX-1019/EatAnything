@@ -2,14 +2,15 @@
 
 本文档描述后端在服务器上的 Docker Compose 部署方式，覆盖服务编排、环境变量、数据库初始化与日常运维命令。手工命令默认在仓库根目录执行；`deploy/scripts/deploy.sh` 可从任意目录调用。
 
-> 本阶段只标准化后端部署方式，不包含 HTTPS、CI/CD、监控、备份与前端发布；这些属于后续阶段，部署时请不要假定它们已经存在。
+> 本文覆盖后端部署、基础监控、备份恢复和发布检查。正式域名、HTTPS/TLS、微信平台合法域名登记仍属于外部事项，不由本仓库自动执行。
 
 ## 1. 环境要求
 
 - Linux 服务器（或本机 Docker Desktop），已安装 Docker Engine 24+、Docker Compose v2（v2.17+，`docker compose` 子命令）与 GNU coreutils `timeout`。
 - 可访问外网以下载镜像：`python:3.12-slim`、`postgres:16-alpine`、`minio/minio:RELEASE.2025-04-22T22-12-26Z`、`minio/mc:RELEASE.2025-04-16T18-13-26Z`（镜像标签可通过 `deploy/.env` 覆盖）。
 - 默认占用宿主机端口：
-  - `8000`：API（默认只绑定 `127.0.0.1`，通过 `API_BIND_HOST` / `API_PORT` 调整）
+- `8000`：API（默认只绑定 `127.0.0.1`，通过 `API_BIND_HOST` / `API_PORT` 调整）
+- `8080`：Web 管理后台（默认只绑定 `127.0.0.1`，通过 `ADMIN_WEB_BIND_HOST` / `ADMIN_WEB_PORT` 调整）
   - `9000`：MinIO API（默认只绑定 `127.0.0.1`，通过 `MINIO_BIND_HOST` / `MINIO_PORT` 调整）
 - PostgreSQL 与 MinIO Console 默认不暴露到宿主机公网。
 
@@ -57,6 +58,12 @@ docker compose -f deploy/compose.yml --env-file deploy/.env.example config
 ```
 
 该命令只解析并渲染最终编排配置，不会启动任何服务。看到完整渲染结果（服务、卷、网络、环境变量）即表示语法正确。本机无 Docker daemon 时此命令仍可运行。
+
+生产环境启动前可在 API 镜像中执行配置预检；命令只输出通过/失败，不会输出 Secret：
+
+```bash
+docker compose -f deploy/compose.yml --env-file deploy/.env run --rm --no-deps db-init python /app/scripts/validate_production_config.py
+```
 
 `COMPOSE_PROJECT_NAME` 必须由当前进程或 `deploy/.env` 显式提供；缺失时 `compose.yml` 和部署脚本都会 fail closed。部署脚本通过 `--project-name` 显式传入最终值，确保无论从哪个目录执行，始终操作指定的一组容器、volume 与网络。变更 project 名称相当于切换到另一套 Compose 资源，生产环境不要随意修改。
 
@@ -124,11 +131,11 @@ curl -s http://127.0.0.1:8000/health/ready
 - `backend/database/001_schema.sql` 是完整的全量 baseline，当前等于 Alembic head 状态（含 `admin_users` 等全部表）；`002_seed.sql` 初始化跨学校复用的基础分类。
 - PostgreSQL 官方镜像会在数据卷第一次初始化时自动执行挂载到 `docker-entrypoint-initdb.d/` 的这两个 SQL 文件。
 - `db-init` 检测到没有 `alembic_version` 表时，先校验 baseline 的关键 schema 特征（`admin_users`、`school_areas`、`check_ins` 表存在，`stores.store_code` / `stores.area_id` 存在，`stores.slug` / `stores.area` 不存在，`idx_media_objects_owner_purpose` 索引存在）。校验失败则 fail closed：返回非 0 且不执行任何 stamp/upgrade。
-- 校验通过后，`db-init` 执行 `alembic stamp 0005_store_catalog`，然后继续 `alembic upgrade head`。
+- 校验通过后，`db-init` 执行 `alembic stamp 0006_admin_governance`，然后继续 `alembic upgrade head`。
 
 **baseline revision 设计**
 
-`001_schema.sql` 对应的明确 Alembic revision 是 `0005_store_catalog`（脚本中以 `BASELINE_REVISION = "0005_store_catalog"` 命名）。不用「把版本动态标记为最新」的方式初始化全新库：如果未来新增 `0006`/`0007` 迁移而 baseline 仍停留在 0005，动态标记会把全新库错误置为最新、跳过后续迁移。固定 stamp 到 `0005_store_catalog` 后，未来 `0006` 会在全新库上被 `alembic upgrade head` 真正执行。
+`001_schema.sql` 对应的明确 Alembic revision 是 `0006_admin_governance`（脚本中以 `BASELINE_REVISION = "0006_admin_governance"` 命名）。不用「把版本动态标记为最新」的方式初始化全新库；未来新增迁移时，应先让增量迁移在现有环境执行，确认稳定后再同步 baseline 和这个固定 revision。
 
 **已有数据库（旧版 Alembic 链升级）**
 
@@ -155,11 +162,18 @@ docker compose -f deploy/compose.yml --env-file deploy/.env run --rm db-init ale
 docker compose -f deploy/compose.yml --env-file deploy/.env run --rm minio-init sh -c 'mc alias set local http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" && mc ls local/'
 ```
 
-**bucket 访问策略（本阶段）**
+**bucket 访问策略**
 
-- 当前 bucket 为**公开读取**（download 策略），保持现有「前端直接访问图片 URL」的架构。
-- bucket **不允许匿名写入**：只有具备 `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` 的 API 服务可以上传。
-- 用户敏感媒体（如打卡照片、头像）未来应拆分为 private bucket 或改用 presigned URL，本阶段**不重构媒体架构**。
+- `MINIO_BUCKET` 为店铺公开素材 bucket，允许匿名读取但不允许匿名写入。
+- `MINIO_PRIVATE_BUCKET` 为用户打卡照片、头像等敏感媒体 bucket，禁止匿名读取和写入。
+- 私有媒体只能通过带用户鉴权的 API 读取；后续如改用 presigned URL，必须保持短时有效期和权限校验。
+
+已有部署在切换到私有媒体前，先使用 API 镜像执行一次迁移检查；确认备份完成后再加 `--apply`：
+
+```bash
+docker compose -f deploy/compose.yml --env-file deploy/.env run --rm --no-deps db-init python /app/scripts/migrate_private_media.py
+docker compose -f deploy/compose.yml --env-file deploy/.env run --rm --no-deps db-init python /app/scripts/migrate_private_media.py --apply
+```
 
 ## 12. PostgreSQL 数据卷语义
 
@@ -198,11 +212,11 @@ DEPLOY_BRANCH=release ./deploy/scripts/deploy.sh
 2. 拒绝 dirty worktree、detached HEAD、当前分支与 `DEPLOY_BRANCH` 不一致等不安全状态；
 3. 在更新代码前执行第一次 `docker compose config --quiet`，无效配置立即停止；
 4. 执行 `git fetch --prune origin`，确认远端分支存在，再通过 `git merge --ff-only` 更新，并要求最终 `HEAD` 与远端提交完全一致；分叉或本地领先都会停止，绝不 force/reset；
-5. 更新后再次执行 `docker compose config --quiet`，只构建 `api` 镜像（`db-init` 共用该镜像），正常利用 Docker layer cache；
+5. 更新后再次执行 `docker compose config --quiet`，构建 `api` 与 `admin-web` 镜像（`db-init` 共用 API 镜像），正常利用 Docker layer cache；
 6. 只启动或更新 `postgres`、`minio`，等待 `postgres` healthy、`minio` running，不触碰当前 `api`；
 7. 通过 `docker compose run --rm --no-deps minio-init` 显式执行本次 MinIO 初始化，命令在 120 秒内退出码为 0 才继续；
 8. 通过 `docker compose run --rm --no-deps db-init` 显式执行本次数据库迁移，复用 `backend/scripts/alembic_stamp_if_fresh.py`；命令在 120 秒内退出码为 0 才继续；
-9. migration 成功后才执行 `docker compose up -d --no-deps api`，并等待 `api` healthy；
+9. migration 成功后才更新 `api`，等待 API healthy 后再更新 `admin-web`，并等待管理站 healthy；
 10. 通过 `docker compose port api ${API_CONTAINER_PORT}` 获取实际宿主机发布地址，请求 `/health/ready`，确认 HTTP 200 且 `status=ready` 后才报告成功。
 
 `minio-init` 和 `db-init` 使用 `run --rm`，命令成功退出就是本次部署的 one-shot PASS，不依赖历史 `Exited (0)` 容器。若 `db-init` 失败，脚本立即返回非 0，不会更新或主动停止已有 `api`，也不会自动回滚数据库、停止基础服务或重置 Git。
@@ -272,6 +286,44 @@ git status --short --branch
 git log -1 --oneline
 ```
 
+## 17. 备份与恢复
+
+备份脚本会导出 PostgreSQL custom dump，并将公开、私有 MinIO bucket 镜像到带 UTC 时间戳的目录；不会输出密码：
+
+```bash
+./deploy/scripts/backup.sh /srv/eatanything/backups
+```
+
+恢复 PostgreSQL 前必须先确认目标环境，并设置明确的保护变量：
+
+```bash
+CONFIRM_RESTORE=YES ./deploy/scripts/restore-postgres.sh /srv/eatanything/backups/20260825T000000Z/postgres.dump
+```
+
+恢复后必须检查 `/health/ready`、店铺列表、登录、图片读取和用户数据。MinIO 文件恢复应在维护窗口内使用 `mc mirror --overwrite` 将对应备份目录恢复到目标 bucket。备份目录应限制为运维账号可读，并按组织策略异地保存、定期清理和演练恢复。
+
+## 18. 监控与质量门禁
+
+- `/health/live` 只检查进程存活，`/health/ready` 检查 PostgreSQL 和公开/私有 MinIO bucket。
+- `/health/metrics` 在 `METRICS_ENABLED=true` 时提供 Prometheus 文本指标；生产环境必须配置 `METRICS_TOKEN` 并通过 `X-Metrics-Token` 访问。
+- 指标只包含受控路径、方法和状态码，不包含用户 ID、Token 或请求正文。
+- 登录、上传和写操作使用应用层限流；当前 Compose 单 API 容器使用进程内窗口计数。扩展为多副本前必须迁移到共享 Redis 等限流存储，不得误以为多副本仍具备全局限流能力。
+- `.github/workflows/ci.yml` 会执行后端测试、前端类型检查和生产构建、Compose 校验及敏感文件检查。
+- 建议监控 ready 失败、5xx 比例、请求延迟、磁盘空间、备份任务失败和容器重启次数。
+
+## 19. 前端发布检查
+
+```bash
+cd frontend
+npm ci
+npm run type-check
+npm run build:mp-weixin
+npm run build:h5
+npm run verify:production
+```
+
+将 `dist/build/mp-weixin` 导入微信开发者工具，完成登录、店铺浏览、随机抽取、收藏、打卡、评价、历史和管理端 H5 冒烟测试后，再由账号所有者执行体验版和正式版发布。正式 API 和图片域名、HTTPS/TLS 及微信合法域名登记需要在外部平台完成。
+
 ## 服务清单
 
 | 服务 | 镜像 | 用途 |
@@ -281,6 +333,7 @@ git log -1 --oneline
 | `minio` | `minio/minio` | 对象存储服务 |
 | `minio-init` | `minio/mc` | 一次性：幂等创建存储桶 |
 | `api` | 本项目构建 | FastAPI（uvicorn `app.main:app`） |
+| `admin-web` | 本项目构建 | 独立 Vue 3 管理站及 `/api/` 反向代理 |
 
 ## 目录结构
 

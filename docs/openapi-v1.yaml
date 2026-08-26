@@ -532,6 +532,48 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /admin/stores/options:
+    get:
+      operationId: adminStoreOptions
+      tags: [Admin Stores]
+      summary: 获取管理端店铺表单选项
+      description: 返回 active 学校及其 active 区域，供管理端新增和编辑店铺使用。
+      responses:
+        '200':
+          description: 学校和区域选项
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, requestId]
+                properties:
+                  data:
+                    type: object
+                    required: [schools]
+                    properties:
+                      schools:
+                        type: array
+                        items:
+                          type: object
+                          required: [id, schoolCode, name, areas]
+                          properties:
+                            id: { type: string }
+                            schoolCode: { type: string }
+                            name: { type: string }
+                            areas:
+                              type: array
+                              items:
+                                type: object
+                                required: [id, areaCode, name]
+                                properties:
+                                  id: { type: string }
+                                  areaCode: { type: string }
+                                  name: { type: string }
+                  requestId: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /admin/stores:
     get:
       operationId: adminListStores

@@ -107,7 +107,15 @@ async def parse_rows(content: bytes, filename: str, settings: Settings) -> list[
     return parsed
 
 
-async def import_stores(session: AsyncSession, storage: MinioStorage, settings: Settings, content: bytes, filename: str) -> dict:
+async def import_stores(
+    session: AsyncSession,
+    storage: MinioStorage,
+    settings: Settings,
+    content: bytes,
+    filename: str,
+    *,
+    allowed_school_ids: set[int] | None = None,
+) -> dict:
     rows = await parse_rows(content, filename, settings)
     codes = [row["storeCode"] for row in rows]
     requested_areas = {(row["schoolCode"], row["areaCode"]) for row in rows}
@@ -135,6 +143,19 @@ async def import_stores(session: AsyncSession, storage: MinioStorage, settings: 
             for school_code, area_code in unknown_areas
         ]
         raise ApiError(422, "IMPORT_VALIDATION_FAILED", "导入文件引用了不存在的学校或区域", details=details)
+    if allowed_school_ids is not None:
+        forbidden = sorted(
+            f"{school_code}/{area_code}"
+            for (school_code, area_code), (school_id, _) in area_map.items()
+            if school_id not in allowed_school_ids
+        )
+        if forbidden:
+            raise ApiError(
+                403,
+                "FORBIDDEN",
+                "导入文件包含无权管理的学校",
+                details=[{"field": "schoolCode", "code": "SCHOOL_SCOPE_FORBIDDEN", "message": value} for value in forbidden],
+            )
 
     existing = {
         store.store_code: store
