@@ -182,7 +182,7 @@ async def import_stores(
                 area = area_map[row["areaName"].strip().lower()]
                 digest = hashlib.sha1(f"{target_school_id}|{area.id}|{row['name'].strip().lower()}|{row['address'].strip().lower()}".encode("utf-8")).hexdigest()[:12]
                 store_code = f"imp-{target_school_id}-{area.id}-{digest}"
-                store = await session.scalar(select(Store).where(Store.store_code == store_code).with_for_update())
+                store = await session.scalar(select(Store).where(Store.store_code == store_code).with_for_update(of=Store))
                 action = "updated" if store else "created"
                 if store is None:
                     store = Store(store_code=store_code, school_id=target_school_id, area_id=area.id, name=row["name"], address=row["address"], status="active")
