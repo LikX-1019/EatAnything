@@ -15,7 +15,7 @@ from app.core.config import Settings
 from app.core.errors import ApiError
 from app.integrations.minio import MinioStorage
 from app.models import School, SchoolArea, Store
-from app.services.stores import attach_image, ensure_categories, replace_categories
+from app.services.stores import attach_image, clear_random_store_cache, ensure_categories, replace_categories
 
 
 HEADERS = ["storeCode", "schoolCode", "areaCode", "name", "category", "address", "imageUrl", "status"]
@@ -198,6 +198,7 @@ async def import_stores(
                 await attach_image(session, store, row["imageUrl"], storage)
                 results.append({"row": row_index, "store_code": store.store_code, "store_id": str(store.id), "action": action})
             await session.commit()
+            clear_random_store_cache(target_school_id)
         except Exception:
             await session.rollback()
             raise
@@ -246,6 +247,9 @@ async def import_stores(
         store.store_code: store
         for store in (await session.scalars(select(Store).where(Store.store_code.in_(codes)))).all()
     }
+    affected_school_ids = {value[0] for value in area_map.values()} | {
+        store.school_id for store in existing.values()
+    }
     results = []
     try:
         for row_index, row in enumerate(rows, start=2):
@@ -279,6 +283,8 @@ async def import_stores(
                 raise ApiError(422, "IMPORT_VALIDATION_FAILED", "已上架店铺必须提供图片", field="imageUrl")
             results.append({"row": row_index, "store_code": store.store_code, "store_id": str(store.id), "action": action})
         await session.commit()
+        for school_id in affected_school_ids:
+            clear_random_store_cache(school_id)
     except Exception:
         await session.rollback()
         raise

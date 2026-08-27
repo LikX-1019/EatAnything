@@ -44,6 +44,7 @@ class RandomStoreData(SchemaBase):
 
 class RandomStoreRequest(SchemaBase):
     exclude_store_id: str | None = None
+    school_id: int | None = Field(default=None, gt=0)
 
 
 class FavoriteState(SchemaBase):

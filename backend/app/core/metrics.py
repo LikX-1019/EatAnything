@@ -59,6 +59,8 @@ class Metrics:
 
     @staticmethod
     def _normalize_path(path: str) -> str:
+        if path == "/api/v1/stores/random":
+            return path
         if path.startswith("/api/v1/stores/"):
             return "/api/v1/stores/:id"
         if path.startswith("/api/v1/admin/stores/"):

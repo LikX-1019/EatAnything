@@ -3,7 +3,7 @@ from pydantic import ValidationError
 
 from app.core.errors import ApiError
 from app.schemas.reviews import ReviewUpsertRequest
-from app.schemas.stores import AdminStoreCreateRequest, AdminStoreUpdateRequest
+from app.schemas.stores import AdminStoreCreateRequest, AdminStoreUpdateRequest, RandomStoreRequest
 from app.services.stores import attach_image
 
 
@@ -52,6 +52,16 @@ def test_store_create_rejects_blank_required_text(field: str) -> None:
 def test_store_update_requires_an_actual_change() -> None:
     with pytest.raises(ValidationError):
         AdminStoreUpdateRequest(version=1)
+
+
+def test_random_store_request_accepts_camel_case_school_id() -> None:
+    payload = RandomStoreRequest(schoolId="9", excludeStoreId="12")
+
+    assert payload.school_id == 9
+    assert payload.exclude_store_id == "12"
+
+    with pytest.raises(ValidationError):
+        RandomStoreRequest(schoolId=0)
 
 
 def test_review_rejects_blank_content() -> None:

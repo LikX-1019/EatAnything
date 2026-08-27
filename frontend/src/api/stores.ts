@@ -70,10 +70,10 @@ export function searchStores(keyword: string, page = 1, pageSize = 20): Promise<
   return getStores({ keyword, page, pageSize })
 }
 
-export function randomStore(excludeStoreId?: string): Promise<RandomStoreData> {
-  return post<RandomStoreData, { excludeStoreId?: string }>(
+export function randomStore(schoolId: string, excludeStoreId?: string): Promise<RandomStoreData> {
+  return post<RandomStoreData, { schoolId: string; excludeStoreId?: string }>(
     '/stores/random',
-    excludeStoreId ? { excludeStoreId } : {},
+    { schoolId, ...(excludeStoreId ? { excludeStoreId } : {}) },
   )
 }
 

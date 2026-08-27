@@ -30,6 +30,8 @@ cp deploy/.env.example deploy/.env
 - `POSTGRES_HOST=postgres`、`POSTGRES_PORT=5432`
 - `MINIO_ENDPOINT=minio:9000`
 
+`API_WORKERS` 控制同一 API 容器内的 Uvicorn worker 数量。当前 4 核服务器默认使用 `4`；每个 worker 都有独立的应用内缓存、限流计数和数据库连接池。现有连接池单 worker 最多使用 15 个连接，因此 4 个 worker 理论上最多占用 60 个 PostgreSQL 连接，调整 worker 数量时必须为迁移、管理任务和健康检查保留连接余量。
+
 ## 3. 生成安全 Secret
 
 生产环境必须替换以下占位值，建议使用随机数生成：
@@ -153,14 +155,14 @@ curl -s http://127.0.0.1:8000/health/ready
 
 **全新数据库（Compose 默认路径）**
 
-- `backend/database/001_schema.sql` 是完整的全量 baseline，当前等于 Alembic head 状态（含 `admin_users` 等全部表）；`002_seed.sql` 初始化跨学校复用的基础分类。
+- `backend/database/001_schema.sql` 是对应 `0006_admin_governance` 的全量 baseline（含 `admin_users` 等全部表）；`002_seed.sql` 初始化跨学校复用的基础分类。当前 `0007_draw_performance_indexes` 由后续 Alembic 增量迁移创建抽取热路径索引。
 - PostgreSQL 官方镜像会在数据卷第一次初始化时自动执行挂载到 `docker-entrypoint-initdb.d/` 的这两个 SQL 文件。
 - `db-init` 检测到没有 `alembic_version` 表时，先校验 baseline 的关键 schema 特征（`admin_users`、`school_areas`、`check_ins` 表存在，`stores.store_code` / `stores.area_id` 存在，`stores.slug` / `stores.area` 不存在，`idx_media_objects_owner_purpose` 索引存在）。校验失败则 fail closed：返回非 0 且不执行任何 stamp/upgrade。
 - 校验通过后，`db-init` 执行 `alembic stamp 0006_admin_governance`，然后继续 `alembic upgrade head`。
 
 **baseline revision 设计**
 
-`001_schema.sql` 对应的明确 Alembic revision 是 `0006_admin_governance`（脚本中以 `BASELINE_REVISION = "0006_admin_governance"` 命名）。不用「把版本动态标记为最新」的方式初始化全新库；未来新增迁移时，应先让增量迁移在现有环境执行，确认稳定后再同步 baseline 和这个固定 revision。
+`001_schema.sql` 对应的明确 Alembic revision 是 `0006_admin_governance`（脚本中以 `BASELINE_REVISION = "0006_admin_governance"` 命名）。不用「把版本动态标记为最新」的方式初始化全新库；`db-init` 在 stamp 后继续执行 `0007_draw_performance_indexes` 及后续迁移。未来同步 baseline 时，必须同时更新 SQL、固定 revision 和校验脚本。
 
 **已有数据库（旧版 Alembic 链升级）**
 
@@ -174,7 +176,7 @@ docker compose -f deploy/compose.yml --env-file deploy/.env run --rm db-init ale
 docker compose -f deploy/compose.yml --env-file deploy/.env run --rm db-init alembic -c /app/alembic.ini upgrade head
 ```
 
-在 `db-init` 完成 stamp 之前，不要在全新 baseline 库上手工执行 `alembic upgrade head`（会与 baseline 冲突而失败）；stamp 之后 `upgrade head` 即为安全的增量空操作。
+在 `db-init` 完成 stamp 之前，不要在全新 baseline 库上手工执行 `alembic upgrade head`（会与 baseline 冲突而失败）；stamp 之后 `upgrade head` 会安全执行 `0007` 及后续增量迁移。
 
 ## 11. MinIO 初始化
 
@@ -333,7 +335,7 @@ CONFIRM_RESTORE=YES ./deploy/scripts/restore-postgres.sh /srv/eatanything/backup
 - `/health/live` 只检查进程存活，`/health/ready` 检查 PostgreSQL 和公开/私有 MinIO bucket。
 - `/health/metrics` 在 `METRICS_ENABLED=true` 时提供 Prometheus 文本指标；生产环境必须配置 `METRICS_TOKEN` 并通过 `X-Metrics-Token` 访问。
 - 指标只包含受控路径、方法和状态码，不包含用户 ID、Token 或请求正文。
-- 登录、上传和写操作使用应用层限流；当前 Compose 单 API 容器使用进程内窗口计数。扩展为多副本前必须迁移到共享 Redis 等限流存储，不得误以为多副本仍具备全局限流能力。
+- 登录、随机抽取、上传和写操作使用应用层限流；当前 Compose 使用进程内窗口计数，每个 Uvicorn worker 都独立计数，因此配置多个 worker 后限额不是全局总额。若需要跨 worker 或跨副本的全局限流，必须迁移到 Redis 等共享限流存储。
 - `.github/workflows/ci.yml` 会执行后端测试、前端类型检查和生产构建、Compose 校验及敏感文件检查。
 - 建议监控 ready 失败、5xx 比例、请求延迟、磁盘空间、备份任务失败和容器重启次数。
 

@@ -49,7 +49,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # docker-entrypoint-initdb.d 只在数据卷第一次初始化（空目录）时执行。
-      # 001_schema.sql 为全量 baseline（等于 Alembic head 状态），
+      # 001_schema.sql 为对应 0006_admin_governance 的全量 baseline，
       # 002_seed.sql 初始化跨学校复用的基础分类；不执行 003_test_data.sql。
       - ../backend/database/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
       - ../backend/database/002_seed.sql:/docker-entrypoint-initdb.d/002_seed.sql:ro
@@ -76,7 +76,7 @@ services:
     # - 全新数据卷：postgres 已在 docker-entrypoint-initdb.d 执行 baseline，
     #   脚本先校验 baseline 关键 schema 特征（fail closed），通过后
     #   alembic stamp 0006_admin_governance，再 alembic upgrade head，
-    #   保证未来新增 0006/0007 迁移时全新库会真正执行增量。
+    #   保证 0007 及后续迁移在全新库上真正执行增量。
     command: ["python", "/app/scripts/alembic_stamp_if_fresh.py"]
     restart: "no"
     networks:
@@ -152,6 +152,8 @@ services:
       - "0.0.0.0"
       - --port
       - "${API_CONTAINER_PORT:-8000}"
+      - --workers
+      - "${API_WORKERS:-4}"
     ports:
       - "${API_BIND_HOST:-127.0.0.1}:${API_PORT:-8000}:${API_CONTAINER_PORT:-8000}"
     # 使用镜像自带 Python 标准库探测 /health/ready，不额外安装 curl

@@ -248,7 +248,9 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function drawRandomStore(): Promise<StoreItem> {
-    const result = await randomStore(currentPick.value?.id)
+    const schoolId = userStore.profile?.schoolId
+    if (!schoolId) throw new Error('抽取店铺前必须先选择学校')
+    const result = await randomStore(schoolId, currentPick.value?.id)
     const next = result.store
     const existingIndex = stores.value.findIndex((store) => store.id === next.id)
     if (existingIndex >= 0) stores.value.splice(existingIndex, 1, next)

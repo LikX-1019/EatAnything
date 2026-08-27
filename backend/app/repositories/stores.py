@@ -82,6 +82,16 @@ async def get_store(
     return await session.scalar(query)
 
 
+async def list_active_stores_for_school(session: AsyncSession, school_id: int) -> list[Store]:
+    """读取一个学校的完整可抽店铺池，供短时缓存批量构建。"""
+    query = (
+        select(Store)
+        .where(Store.school_id == school_id, Store.status == "active")
+        .order_by(Store.id)
+    )
+    return list((await session.scalars(query)).all())
+
+
 async def stats_for_stores(session: AsyncSession, store_ids: Iterable[int]) -> dict[int, StoreStats]:
     ids = list(store_ids)
     if not ids:
