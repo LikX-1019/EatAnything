@@ -5,7 +5,7 @@
 ## 运行
 
 ```bash
-npm install
+npm ci
 npm run dev:mp-weixin
 ```
 
@@ -26,3 +26,16 @@ npm run build:mp-weixin
 店铺图片地址由后端 API 返回，实际文件保存在服务器 MinIO 中。前端不再包含餐品图片，缺图时使用极小的内联透明占位，避免静态图片进入小程序主包。
 
 仅用于服务器初始化和灾备恢复的种子素材保存在 `backend/seed_assets`，不会进入前端构建产物；来源、许可证和 MinIO 对象键记录在 `backend/database/seed_assets.json` 中。
+
+## 发布验证
+
+```bash
+npm ci
+npm run type-check
+npm test
+npm run build:mp-weixin
+npm run build:h5
+npm run verify:production
+```
+
+将 `dist/build/mp-weixin` 导入微信开发者工具，确认正式 API 域名、图片域名和微信合法域名均为 HTTPS，再上传体验版。最终正式发布必须由小程序账号所有者在微信公众平台完成。

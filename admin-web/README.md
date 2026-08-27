@@ -7,7 +7,7 @@
 ```powershell
 cd admin-web
 Copy-Item .env.example .env.development
-npm install
+npm ci
 npm run dev
 ```
 
@@ -24,12 +24,32 @@ npm run build
 
 ## 首次使用
 
-先执行数据库迁移，再使用后端脚本创建管理员。现有 `store_admin` 兼容为平台管理员；新建管理员时建议显式选择 `platform_admin` 或 `school_admin`。
+先执行数据库迁移，再使用后端脚本创建管理员。现有 `store_admin` 仅用于兼容旧数据；新账号必须使用 `platform_admin` 或 `school_admin`。
 
 ```powershell
 $env:PYTHONPATH=(Resolve-Path '..\backend').Path
 alembic -c ..\backend\alembic.ini upgrade head
-python ..\backend\scripts\create_admin.py admin --display-name "平台管理员"
+python ..\backend\scripts\create_admin.py admin --role platform_admin --display-name "平台管理员"
 ```
 
 生产环境不得在前端环境变量中保存密码、JWT Secret、数据库密码或 MinIO Secret。
+
+## 权限与功能
+
+- `platform_admin` 可管理所有学校及管理员账号。
+- `school_admin` 只能访问后端授权的学校，前端筛选器不能绕过接口权限。
+- 用户、店铺、评论和打卡照片均按学校筛选；用户档案可查看该用户的账号、评论与打卡并直接治理。
+- 店铺批量导入先选择学校，模板使用中文标题，只接受图片 URL，不接受嵌入图片。
+
+完整操作说明见 [Web 管理后台使用手册](../docs/admin-guide.md)。
+
+## 发布验证
+
+```powershell
+npm ci
+npm run type-check
+npm run build
+docker build -t eat-anything-admin-web:local .
+```
+
+生产镜像已配置 SPA 回退、gzip、上传大小限制和常用安全响应头。正式域名反向代理见 [部署说明](../deploy/README.md)。

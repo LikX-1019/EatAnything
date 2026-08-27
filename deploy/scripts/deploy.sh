@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 DEPLOY_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
 REPO_ROOT="$(cd -- "${DEPLOY_DIR}/.." && pwd -P)"
 COMPOSE_FILE="${DEPLOY_DIR}/compose.yml"
+PRODUCTION_COMPOSE_FILE="${DEPLOY_DIR}/compose.production.yml"
 ENV_FILE="${DEPLOY_DIR}/.env"
 
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
@@ -21,6 +22,7 @@ NEW_COMMIT=""
 CURRENT_BRANCH=""
 COMPOSE_PROJECT_NAME_VALUE=""
 COMPOSE=()
+ENABLE_CADDY_VALUE=0
 
 log() {
     printf '[deploy] %s\n' "$*"
@@ -47,6 +49,9 @@ print_failure_diagnostics() {
     print_compose_command logs api --tail=200 >&2
     print_compose_command logs postgres --tail=200 >&2
     print_compose_command logs minio --tail=200 >&2
+    if [[ "${ENABLE_CADDY_VALUE}" == "1" ]]; then
+        print_compose_command logs caddy --tail=200 >&2
+    fi
     printf '  minio-init/db-init 使用 run --rm，本次执行输出保留在当前部署终端中。\n' >&2
 }
 
@@ -230,6 +235,7 @@ main() {
     local api_container_port=""
     local published_address=""
     local readiness_url=""
+    local env_enable_caddy=""
     local -a build_args=(build)
 
     CURRENT_STEP="检查参数"
@@ -241,6 +247,15 @@ main() {
     CURRENT_STEP="检查环境文件"
     [[ -f "${ENV_FILE}" ]] || fail "缺少 deploy/.env。请先执行：cp deploy/.env.example deploy/.env，然后填写真实配置。"
     check_env_permissions
+
+    CURRENT_STEP="读取 HTTPS 代理配置"
+    env_enable_caddy="$(read_env_value ENABLE_CADDY || true)"
+    ENABLE_CADDY_VALUE="${ENABLE_CADDY:-${env_enable_caddy:-0}}"
+    validate_flag ENABLE_CADDY "${ENABLE_CADDY_VALUE}"
+    if [[ "${ENABLE_CADDY_VALUE}" == "1" ]]; then
+        [[ -f "${PRODUCTION_COMPOSE_FILE}" ]] || fail "缺少 deploy/compose.production.yml"
+        [[ -f "${DEPLOY_DIR}/Caddyfile" ]] || fail "缺少 deploy/Caddyfile"
+    fi
 
     CURRENT_STEP="读取 Compose project 配置"
     require_command sed
@@ -261,6 +276,9 @@ main() {
         --file "${COMPOSE_FILE}"
         --env-file "${ENV_FILE}"
     )
+    if [[ "${ENABLE_CADDY_VALUE}" == "1" ]]; then
+        COMPOSE+=(--file "${PRODUCTION_COMPOSE_FILE}")
+    fi
 
     CURRENT_STEP="检查依赖"
     require_command git
@@ -302,6 +320,7 @@ main() {
         printf 'Branch: %s\n' "${CURRENT_BRANCH}"
         printf 'Commit: %s\n' "${OLD_COMMIT}"
         printf 'Compose project: %s\n' "${COMPOSE_PROJECT_NAME_VALUE}"
+        printf 'Caddy HTTPS: %s\n' "${ENABLE_CADDY_VALUE}"
         printf '未执行 git fetch/merge、镜像构建、服务启动或数据库迁移。\n'
         printf '================================\n'
         return
@@ -370,6 +389,13 @@ main() {
     "${COMPOSE[@]}" up -d --no-deps admin-web
     wait_for_healthy admin-web
 
+    if [[ "${ENABLE_CADDY_VALUE}" == "1" ]]; then
+        CURRENT_STEP="启动或更新 HTTPS 反向代理"
+        log "管理后台已健康，开始启动或更新 caddy..."
+        "${COMPOSE[@]}" up -d --no-deps caddy
+        wait_for_healthy caddy
+    fi
+
     CURRENT_STEP="解析 API 发布地址"
     api_container_port="${API_CONTAINER_PORT:-$(read_env_value API_CONTAINER_PORT || true)}"
     api_container_port="${api_container_port:-8000}"
@@ -399,6 +425,9 @@ main() {
     printf 'db-init: passed\n'
     printf 'api: healthy\n\n'
     printf 'admin-web: healthy\n\n'
+    if [[ "${ENABLE_CADDY_VALUE}" == "1" ]]; then
+        printf 'caddy: healthy\n\n'
+    fi
     printf 'readiness: HTTP 200, status=ready\n'
     printf '================================\n'
 }

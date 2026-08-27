@@ -1,0 +1,36 @@
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), geolocation=(), microphone=()"
+		-Server
+	}
+
+	@admin_root path /admin
+	redir @admin_root /admin/ 308
+
+	handle /admin/* {
+		reverse_proxy admin-web:80
+	}
+
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle /health/* {
+		reverse_proxy api:8000
+	}
+
+	handle_path /media/* {
+		header Cache-Control "public, max-age=86400"
+		reverse_proxy minio:9000 {
+			header_down -Strict-Transport-Security
+		}
+	}
+
+	respond "接口不存在" 404
+}

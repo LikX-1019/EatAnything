@@ -62,14 +62,38 @@ jobs:
       - name: 生产产物检查
         run: npm run verify:production
 
+  admin-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: admin-web/package-lock.json
+      - name: 安装管理后台依赖
+        run: npm ci
+      - name: TypeScript 检查
+        run: npm run type-check
+      - name: 生产构建
+        run: npm run build
+      - name: 构建管理后台镜像
+        working-directory: .
+        run: docker build -f admin-web/Dockerfile admin-web
+
   deployment:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Compose 模板校验
         run: docker compose -f deploy/compose.yml --env-file deploy/.env.example config --quiet
+      - name: HTTPS 生产叠加层校验
+        run: docker compose -f deploy/compose.yml -f deploy/compose.production.yml --env-file deploy/.env.example config --quiet
       - name: Shell 语法检查
-        run: bash -n deploy/scripts/deploy.sh deploy/scripts/backup.sh deploy/scripts/restore-postgres.sh
+        run: bash -n deploy/scripts/deploy.sh deploy/scripts/backup.sh deploy/scripts/restore-postgres.sh deploy/scripts/smoke-test.sh
       - name: 工作区敏感文件检查
         shell: bash
         run: |
