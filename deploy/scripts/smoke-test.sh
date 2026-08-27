@@ -27,7 +27,7 @@ trap 'rm -f -- "${RESPONSE_FILE}" "${HEADER_FILE}"' EXIT
 echo "检查存活状态..."
 curl --fail --silent --show-error --max-time 15 \
     "${PUBLIC_BASE_URL}/health/live" > "${RESPONSE_FILE}"
-grep -Eq '"status"[[:space:]]*:[[:space:]]*"alive"' "${RESPONSE_FILE}" || {
+grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "${RESPONSE_FILE}" || {
     echo "存活检查响应不符合预期" >&2
     exit 1
 }
