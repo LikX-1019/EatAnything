@@ -1,0 +1,200 @@
+# EatAnything 后端生产部署编排
+#
+# 用法：
+#   docker compose --env-file deploy/.env.example config
+#   docker compose --env-file deploy/.env up -d --build
+#
+# 所有密钥通过 deploy/.env 注入，本文件不包含任何真实 Secret。
+name: ${COMPOSE_PROJECT_NAME:?请显式设置 COMPOSE_PROJECT_NAME}
+
+x-api-env: &api_env
+  APP_ENV: ${APP_ENV:-development}
+  APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
+  JWT_SECRET: ${JWT_SECRET}
+  JWT_EXPIRE_SECONDS: ${JWT_EXPIRE_SECONDS:-604800}
+  DEV_AUTH_ENABLED: ${DEV_AUTH_ENABLED:-false}
+  WECHAT_APP_ID: ${WECHAT_APP_ID:-}
+  WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
+  POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+  POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+  POSTGRES_DB: ${POSTGRES_DB}
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+  MINIO_BUCKET: ${MINIO_BUCKET:-eat-anything}
+  MINIO_PRIVATE_BUCKET: ${MINIO_PRIVATE_BUCKET:-eat-anything-private}
+  MINIO_SECURE: ${MINIO_SECURE:-false}
+  MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
+  MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-5242880}
+  CORS_ORIGINS: ${CORS_ORIGINS:-}
+  METRICS_ENABLED: ${METRICS_ENABLED:-true}
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
+  TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+  SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # 不默认暴露宿主机端口，仅通过内部网络访问。
+    # 如需宿主机调试可取消注释（只建议绑定 127.0.0.1）：
+    # ports:
+    #   - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # docker-entrypoint-initdb.d 只在数据卷第一次初始化（空目录）时执行。
+      # 001_schema.sql 为对应 0006_admin_governance 的全量 baseline，
+      # 002_seed.sql 初始化跨学校复用的基础分类；不执行 003_test_data.sql。
+      - ../backend/database/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+      - ../backend/database/002_seed.sql:/docker-entrypoint-initdb.d/002_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks:
+      - eatanything
+
+  db-init:
+    image: ${API_IMAGE:-eat-anything-api:local}
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *api_env
+    # 数据库初始化策略（backend/scripts/alembic_stamp_if_fresh.py）：
+    # - 已有 alembic_version：直接 alembic upgrade head。
+    # - 全新数据卷：postgres 已在 docker-entrypoint-initdb.d 执行 baseline，
+    #   脚本先校验 baseline 关键 schema 特征（fail closed），通过后
+    #   alembic stamp 0006_admin_governance，再 alembic upgrade head，
+    #   保证 0007 及后续迁移在全新库上真正执行增量。
+    command: ["python", "/app/scripts/alembic_stamp_if_fresh.py"]
+    restart: "no"
+    networks:
+      - eatanything
+
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    volumes:
+      - minio_data:/data
+    # MinIO Console（9001）默认不暴露端口；需要本地管理时取消注释：
+    # ports:
+    #   - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    ports:
+      - "${MINIO_BIND_HOST:-127.0.0.1}:${MINIO_PORT:-9000}:9000"
+    networks:
+      - eatanything
+
+  minio-init:
+    image: ${MINIO_MC_IMAGE:-minio/mc:RELEASE.2025-04-16T18-13-26Z}
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-eat-anything}
+      MINIO_PRIVATE_BUCKET: ${MINIO_PRIVATE_BUCKET:-eat-anything-private}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ "$${MINIO_SECURE}" = "true" ]; then scheme="https"; else scheme="http"; fi
+        until mc alias set local "$${scheme}://$${MINIO_ENDPOINT}" "$${MINIO_ACCESS_KEY}" "$${MINIO_SECRET_KEY}"; do
+          echo "等待 MinIO 就绪..."
+          sleep 2
+        done
+        # --ignore-existing 保证幂等：bucket 已存在时直接成功退出
+        mc mb --ignore-existing "local/$${MINIO_BUCKET}"
+        mc mb --ignore-existing "local/$${MINIO_PRIVATE_BUCKET}"
+        # 只有店铺公开素材 bucket 允许匿名读取；用户媒体 bucket 保持私有。
+        mc anonymous set download "local/$${MINIO_BUCKET}"
+        mc anonymous set none "local/$${MINIO_PRIVATE_BUCKET}"
+        echo "MinIO bucket 初始化完成"
+    # 成功退出属于正常状态（Exited (0)）
+    restart: "no"
+    networks:
+      - eatanything
+
+  api:
+    image: ${API_IMAGE:-eat-anything-api:local}
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    environment: *api_env
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "${API_CONTAINER_PORT:-8000}"
+      - --workers
+      - "${API_WORKERS:-4}"
+    ports:
+      - "${API_BIND_HOST:-127.0.0.1}:${API_PORT:-8000}:${API_CONTAINER_PORT:-8000}"
+    # 使用镜像自带 Python 标准库探测 /health/ready，不额外安装 curl
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${API_CONTAINER_PORT:-8000}/health/ready', timeout=5)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - eatanything
+
+  admin-web:
+    image: ${ADMIN_WEB_IMAGE:-eat-anything-admin-web:local}
+    build:
+      context: ../admin-web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${ADMIN_WEB_BIND_HOST:-127.0.0.1}:${ADMIN_WEB_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/admin/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - eatanything
+
+volumes:
+  postgres_data:
+    name: ${POSTGRES_VOLUME:-eat-anything-postgres-data}
+  minio_data:
+    name: ${MINIO_VOLUME:-eat-anything-minio-data}
+
+networks:
+  eatanything:
+    name: ${NETWORK_NAME:-eat-anything-net}
+    driver: bridge

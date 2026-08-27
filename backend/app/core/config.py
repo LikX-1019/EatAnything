@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,17 +28,22 @@ class Settings(BaseSettings):
     minio_access_key: str = Field(validation_alias="MINIO_ACCESS_KEY")
     minio_secret_key: str = Field(validation_alias="MINIO_SECRET_KEY")
     minio_bucket: str = Field(validation_alias="MINIO_BUCKET")
+    minio_private_bucket: str = Field(default="eat-anything-private", validation_alias="MINIO_PRIVATE_BUCKET")
     minio_secure: bool = Field(default=False, validation_alias="MINIO_SECURE")
     minio_public_url: str = Field(validation_alias="MINIO_PUBLIC_URL")
     max_upload_bytes: int = Field(default=5 * 1024 * 1024, validation_alias="MAX_UPLOAD_BYTES")
     cors_origins: str = Field(default="", validation_alias="CORS_ORIGINS")
     seed_admin_password: str | None = Field(default=None, validation_alias="SEED_ADMIN_PASSWORD")
+    metrics_enabled: bool = Field(default=True, validation_alias="METRICS_ENABLED")
+    metrics_token: str | None = Field(default=None, validation_alias="METRICS_TOKEN")
+    trusted_proxy_ips: str = Field(default="", validation_alias="TRUSTED_PROXY_IPS")
 
     model_config = SettingsConfigDict(
         env_file=str(PROJECT_ROOT / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
 
     @field_validator("cors_origins", mode="before")
@@ -52,17 +58,45 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_runtime(self) -> "Settings":
         if self.app_env.lower() in {"production", "prod"}:
-            if self.jwt_secret == "dev-only-change-me-please-set-32-bytes":
-                raise ValueError("JWT_SECRET must be changed in production")
+            self._validate_production_secret("JWT_SECRET", self.jwt_secret, minimum_length=32)
+            self._validate_production_secret("POSTGRES_PASSWORD", self.postgres_password, minimum_length=16)
+            self._validate_production_secret("MINIO_ACCESS_KEY", self.minio_access_key, minimum_length=12)
+            self._validate_production_secret("MINIO_SECRET_KEY", self.minio_secret_key, minimum_length=16)
             if not self.wechat_app_id or not self.wechat_app_secret:
                 raise ValueError("WECHAT_APP_ID and WECHAT_APP_SECRET are required in production")
             if self.dev_auth_enabled:
                 raise ValueError("DEV_AUTH_ENABLED must be false in production")
+            self._validate_public_url("MINIO_PUBLIC_URL", self.minio_public_url)
+            if not self.minio_private_bucket or self.minio_private_bucket == self.minio_bucket:
+                raise ValueError("MINIO_PRIVATE_BUCKET must be configured and differ from MINIO_BUCKET")
+            if self.metrics_enabled and not self.metrics_token:
+                raise ValueError("METRICS_TOKEN is required when METRICS_ENABLED is true in production")
+            if self.metrics_enabled and self.metrics_token:
+                self._validate_production_secret("METRICS_TOKEN", self.metrics_token, minimum_length=16)
+            for origin in self.cors_origin_list:
+                self._validate_public_url("CORS_ORIGINS", origin)
         if self.jwt_expire_seconds <= 0:
             raise ValueError("JWT_EXPIRE_SECONDS must be positive")
         if self.max_upload_bytes <= 0:
             raise ValueError("MAX_UPLOAD_BYTES must be positive")
         return self
+
+    @staticmethod
+    def _validate_production_secret(name: str, value: str, *, minimum_length: int) -> None:
+        normalized = value.strip().lower()
+        forbidden = ("change-me", "changeme", "example", "your_", "dev-only", "password")
+        if len(value.strip()) < minimum_length or any(marker in normalized for marker in forbidden):
+            raise ValueError(f"{name} must be a strong non-template value in production")
+
+    @staticmethod
+    def _validate_public_url(name: str, value: str) -> None:
+        parsed = urlparse(value.strip())
+        hostname = (parsed.hostname or "").lower()
+        if parsed.scheme not in {"http", "https"} or not hostname:
+            raise ValueError(f"{name} must be an absolute HTTP(S) URL in production")
+        blocked = {"localhost", "127.0.0.1", "::1", "0.0.0.0", "121.43.97.186"}
+        if hostname in blocked or hostname == "example.com" or hostname.endswith(".example.com") or hostname.endswith(".example.test"):
+            raise ValueError(f"{name} must not point to a local, test, or placeholder host in production")
 
     @property
     def database_url(self) -> str:

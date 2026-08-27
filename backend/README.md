@@ -4,7 +4,12 @@
 
 ## 本地运行
 
-1. 将本地凭据保存在仓库根目录的 `.env` 中。
+1. 从仓库根目录 `.env.example` 复制本地配置；真实凭据只保存在被 Git 忽略的 `.env` 中。
+
+```powershell
+Copy-Item .env.example .env
+python -m pip install -e "backend[dev]"
+```
 2. 执行增量数据库迁移：
 
 ```powershell
@@ -15,8 +20,16 @@ alembic -c backend\alembic.ini upgrade head
 3. 需要调用管理接口时，创建管理员：
 
 ```powershell
-D:\develop\anaconda3\python.exe backend\scripts\create_admin.py admin --display-name "本地管理员"
+python backend\scripts\create_admin.py admin --role platform_admin --display-name "本地管理员"
 ```
+
+创建学校管理员时必须指定学校 ID；绑定多所学校时重复传入参数：
+
+```powershell
+python backend\scripts\create_admin.py school-admin --role school_admin --school-id 1 --school-id 2
+```
+
+脚本会在终端中隐藏输入密码，不会读取 `SEED_ADMIN_PASSWORD`，也不会输出密码。
 
 4. 启动 API：
 
@@ -49,10 +62,19 @@ backend\scripts\server_tunnel.ps1 Stop
 
 隧道会将本机 PostgreSQL 地址 `127.0.0.1:5433` 和 MinIO 地址 `127.0.0.1:9000` 转发到服务器。凭据只保存在仓库根目录的 `.env` 中，不会出现在 SSH 命令行参数里。
 
+## 生产部署
+
+服务器端使用 Docker Compose 部署 PostgreSQL、MinIO、API、Web 管理后台和可选的 Caddy HTTPS 入口，完整步骤见仓库根目录的 [deploy/README.md](../deploy/README.md)。部署环境变量使用 `deploy/.env`，与本机开发的仓库根目录 `.env` 相互独立。
+
 ## 验证
 
 ```powershell
 $env:PYTHONPATH=(Resolve-Path 'backend').Path
 python -m compileall -q backend\app
 pytest backend\tests -q
+Push-Location backend
+ruff check app tests
+Pop-Location
 ```
+
+生产配置变量和校验规则见 [环境变量与配置说明](../docs/configuration.md)。

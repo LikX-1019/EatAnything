@@ -50,7 +50,7 @@ async def get_current_user(payload: Annotated[dict[str, Any], Depends(get_token_
 
 
 async def get_current_admin(payload: Annotated[dict[str, Any], Depends(get_token_payload)], session: SessionDep) -> AdminUser:
-    if payload.get("kind") != "admin" or payload.get("role") != "store_admin":
+    if payload.get("kind") != "admin" or payload.get("role") not in {"store_admin", "platform_admin", "school_admin"}:
         raise ApiError(403, "FORBIDDEN", "需要管理员权限")
     try:
         admin_id = int(payload["sub"])

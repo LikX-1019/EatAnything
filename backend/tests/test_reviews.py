@@ -41,6 +41,9 @@ class ReviewSession:
     async def refresh(self, _value):
         return None
 
+    async def get(self, _model, _key):
+        return None
+
 
 class Storage:
     def public_object_url(self, _key):

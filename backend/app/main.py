@@ -5,6 +5,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import IntegrityError
@@ -16,6 +17,8 @@ from app.core.config import get_settings
 from app.core.errors import api_error_handler, http_error_handler, integrity_error_handler, unhandled_error_handler, validation_error_handler, ApiError
 from app.core.logging import configure_logging
 from app.db.session import engine
+from app.core.metrics import metrics
+from app.core.rate_limit import rate_limiter
 
 
 @asynccontextmanager
@@ -44,10 +47,22 @@ async def request_context(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID") or f"req_{uuid.uuid4().hex}"
     request.state.request_id = request_id
     started = time.perf_counter()
+    retry_after = rate_limiter.check(request, settings)
+    if retry_after is not None:
+        metrics.observe_request(request.method, request.url.path, 429, 0)
+        return JSONResponse(
+            {
+                "error": {"status": 429, "code": "RATE_LIMITED", "message": "请求过于频繁，请稍后重试"},
+                "requestId": request_id,
+            },
+            status_code=429,
+            headers={"Retry-After": str(retry_after), "X-Request-ID": request_id},
+        )
     try:
         response = await call_next(request)
     finally:
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
+        metrics.observe_request(request.method, request.url.path, getattr(locals().get("response"), "status_code", 500), duration_ms)
         logger.info("request_completed", request_id=request_id, method=request.method, path=request.url.path, duration_ms=duration_ms)
     response.headers["X-Request-ID"] = request_id
     return response

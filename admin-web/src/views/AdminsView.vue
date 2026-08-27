@@ -1,0 +1,22 @@
+<script setup lang="ts">
+import { onMounted, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { api } from '../api/client'
+import StatusSticker from '../components/StatusSticker.vue'
+import { useAuthStore } from '../stores/auth'
+import { useWorkspaceStore } from '../stores/workspace'
+
+interface AdminItem{id:string;username:string;displayName:string;role:string;status:string;schoolIds:string[];lastLoginAt?:string;createdAt:string}
+const auth=useAuthStore();const workspace=useWorkspaceStore();const rows=ref<AdminItem[]>([]);const dialog=ref(false);const editingId=ref('')
+const form=reactive({username:'',password:'',displayName:'',role:'school_admin',status:'active',schoolIds:[] as string[]})
+async function load(){if(!auth.admin?.isPlatformAdmin)return;rows.value=await api.get<AdminItem[]>('/admin/admin-users')}
+function create(){editingId.value='';Object.assign(form,{username:'',password:'',displayName:'',role:'school_admin',status:'active',schoolIds:[]});dialog.value=true}
+function edit(item:AdminItem){editingId.value=item.id;Object.assign(form,{username:item.username,password:'',displayName:item.displayName,role:item.role==='store_admin'?'platform_admin':item.role,status:item.status,schoolIds:[...item.schoolIds]});dialog.value=true}
+async function save(){try{if(editingId.value)await api.patch(`/admin/admin-users/${editingId.value}`,{displayName:form.displayName,role:form.role,status:form.status,schoolIds:form.schoolIds,password:form.password||undefined});else await api.post('/admin/admin-users',{...form,schoolIds:form.role==='school_admin'?form.schoolIds:[]});ElMessage.success('管理员资料已保存');dialog.value=false;await load()}catch(e){ElMessage.error(e instanceof Error?e.message:'保存失败')}}
+onMounted(load)
+</script>
+<template>
+  <section v-if="auth.admin?.isPlatformAdmin" class="paper-card table-paper"><div class="table-toolbar"><h3>管理员协作贴纸</h3><el-button type="primary" @click="create">＋ 新增管理员</el-button></div><el-table :data="rows" row-key="id"><el-table-column label="管理员" min-width="180"><template #default="s"><strong>{{ s.row.displayName }}</strong><div class="mono">{{ s.row.username }}</div></template></el-table-column><el-table-column label="角色" width="140"><template #default="s">{{ s.row.role==='school_admin'?'学校管理员':'平台管理员' }}</template></el-table-column><el-table-column label="学校范围" min-width="220"><template #default="s"><template v-if="s.row.role==='school_admin'">{{ s.row.schoolIds.map((id:string)=>workspace.schools.find(i=>i.id===id)?.name).filter(Boolean).join('、')||'未绑定' }}</template><template v-else>全部学校</template></template></el-table-column><el-table-column label="状态" width="100"><template #default="s"><StatusSticker :status="s.row.status"/></template></el-table-column><el-table-column label="最近登录" width="180"><template #default="s">{{ s.row.lastLoginAt?new Date(s.row.lastLoginAt).toLocaleString():'尚未登录' }}</template></el-table-column><el-table-column label="操作" width="90"><template #default="s"><el-button link type="primary" @click="edit(s.row)">编辑</el-button></template></el-table-column></el-table></section>
+  <section v-else class="paper-card empty-note"><div><div style="font-size:48px">🔐</div><h3>只有平台管理员可以打开这页</h3></div></section>
+  <el-dialog v-model="dialog" :title="editingId?'编辑管理员贴纸':'邀请管理员一起整理'" width="620px"><el-form label-position="top"><div class="form-grid"><el-form-item label="账号"><el-input v-model="form.username" :disabled="Boolean(editingId)"/></el-form-item><el-form-item :label="editingId?'重置密码（留空不修改）':'初始密码'"><el-input v-model="form.password" type="password" show-password/></el-form-item><el-form-item label="显示名称"><el-input v-model="form.displayName"/></el-form-item><el-form-item label="角色"><el-select v-model="form.role" style="width:100%"><el-option label="平台管理员" value="platform_admin"/><el-option label="学校管理员" value="school_admin"/></el-select></el-form-item><el-form-item v-if="form.role==='school_admin'" label="绑定学校" class="wide"><el-select v-model="form.schoolIds" multiple filterable style="width:100%"><el-option v-for="item in workspace.schools" :key="item.id" :label="item.name" :value="item.id"/></el-select></el-form-item><el-form-item v-if="editingId" label="状态"><el-select v-model="form.status"><el-option label="正常" value="active"/><el-option label="禁用" value="disabled"/></el-select></el-form-item></div></el-form><template #footer><el-button @click="dialog=false">取消</el-button><el-button type="primary" @click="save">保存</el-button></template></el-dialog>
+</template>

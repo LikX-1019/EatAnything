@@ -70,10 +70,10 @@ export function searchStores(keyword: string, page = 1, pageSize = 20): Promise<
   return getStores({ keyword, page, pageSize })
 }
 
-export function randomStore(excludeStoreId?: string): Promise<RandomStoreData> {
-  return post<RandomStoreData, { excludeStoreId?: string }>(
+export function randomStore(schoolId: string, excludeStoreId?: string): Promise<RandomStoreData> {
+  return post<RandomStoreData, { schoolId: string; excludeStoreId?: string }>(
     '/stores/random',
-    excludeStoreId ? { excludeStoreId } : {},
+    { schoolId, ...(excludeStoreId ? { excludeStoreId } : {}) },
   )
 }
 
@@ -81,6 +81,6 @@ export function getStoreDetail(storeId: string): Promise<StoreDetail> {
   return get<StoreDetail>(`/stores/${encodeURIComponent(storeId)}`)
 }
 
-export function recordStoreVisit(storeId: string): Promise<{ id: string; action: string; storeId: string }> {
+export function confirmStoreChoice(storeId: string): Promise<{ id: string; action: string; storeId: string }> {
   return post<{ id: string; action: string; storeId: string }>(`/stores/${encodeURIComponent(storeId)}/visits`)
 }

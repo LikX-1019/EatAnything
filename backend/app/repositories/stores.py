@@ -23,6 +23,7 @@ async def count_stores(
     keyword: str | None = None,
     status: str | None = None,
     school_id: int | None = None,
+    school_ids: set[int] | None = None,
 ) -> int:
     query = select(func.count(Store.id))
     if active_only:
@@ -31,6 +32,8 @@ async def count_stores(
         query = query.where(Store.status == status)
     if school_id is not None:
         query = query.where(Store.school_id == school_id)
+    elif school_ids is not None:
+        query = query.where(Store.school_id.in_(school_ids or {-1}))
     if keyword:
         pattern = f"%{keyword.strip()}%"
         query = query.where(or_(Store.name.ilike(pattern), Store.address.ilike(pattern), Store.store_code.ilike(pattern)))
@@ -46,6 +49,7 @@ async def list_stores(
     page: int,
     page_size: int,
     school_id: int | None = None,
+    school_ids: set[int] | None = None,
 ) -> list[Store]:
     query = select(Store)
     if active_only:
@@ -54,6 +58,8 @@ async def list_stores(
         query = query.where(Store.status == status)
     if school_id is not None:
         query = query.where(Store.school_id == school_id)
+    elif school_ids is not None:
+        query = query.where(Store.school_id.in_(school_ids or {-1}))
     if keyword:
         pattern = f"%{keyword.strip()}%"
         query = query.where(or_(Store.name.ilike(pattern), Store.address.ilike(pattern), Store.store_code.ilike(pattern)))
@@ -74,6 +80,16 @@ async def get_store(
     if for_update:
         query = query.with_for_update()
     return await session.scalar(query)
+
+
+async def list_active_stores_for_school(session: AsyncSession, school_id: int) -> list[Store]:
+    """读取一个学校的完整可抽店铺池，供短时缓存批量构建。"""
+    query = (
+        select(Store)
+        .where(Store.school_id == school_id, Store.status == "active")
+        .order_by(Store.id)
+    )
+    return list((await session.scalars(query)).all())
 
 
 async def stats_for_stores(session: AsyncSession, store_ids: Iterable[int]) -> dict[int, StoreStats]:

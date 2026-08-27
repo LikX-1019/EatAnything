@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import re
+import secrets
+import time
+from dataclasses import dataclass
 from urllib.parse import unquote, urlparse
 
 from sqlalchemy import delete, insert, select
@@ -11,8 +15,52 @@ from app.integrations.minio import MinioStorage
 from app.models import MediaObject, SchoolArea, Store, StoreCategory, StoreImage
 from app.models.entities import store_category_links
 from app.repositories import stores as store_repo
-from app.repositories.history import add_history
-from app.repositories.states import states_for_stores
+from app.repositories.states import authorized_state_for_store, states_for_stores
+
+
+RANDOM_STORE_CACHE_TTL_SECONDS = 10.0
+
+
+@dataclass(frozen=True, slots=True)
+class _RandomStorePool:
+    expires_at: float
+    stores: tuple[dict, ...]
+
+
+_random_store_pools: dict[int, _RandomStorePool] = {}
+_random_store_pool_locks: dict[int, asyncio.Lock] = {}
+_random_store_pool_versions: dict[int, int] = {}
+
+
+def clear_random_store_cache(school_id: int | None = None) -> None:
+    """清理当前 worker 的抽取缓存；跨 worker 最迟按 TTL 自动更新。"""
+    if school_id is None:
+        for key in _random_store_pools.keys() | _random_store_pool_locks.keys():
+            _random_store_pool_versions[key] = _random_store_pool_versions.get(key, 0) + 1
+        _random_store_pools.clear()
+        for key, lock in list(_random_store_pool_locks.items()):
+            if not lock.locked():
+                _random_store_pool_locks.pop(key, None)
+                _random_store_pool_versions.pop(key, None)
+        return
+    _random_store_pool_versions[school_id] = _random_store_pool_versions.get(school_id, 0) + 1
+    _random_store_pools.pop(school_id, None)
+    lock = _random_store_pool_locks.get(school_id)
+    if lock is None or not lock.locked():
+        _random_store_pool_locks.pop(school_id, None)
+        _random_store_pool_versions.pop(school_id, None)
+
+
+def _prune_random_store_cache(now: float) -> None:
+    """移除已过期且没有请求正在填充的缓存键。"""
+    expired = [key for key, pool in _random_store_pools.items() if pool.expires_at <= now]
+    for key in expired:
+        lock = _random_store_pool_locks.get(key)
+        if lock is not None and lock.locked():
+            continue
+        _random_store_pools.pop(key, None)
+        _random_store_pool_locks.pop(key, None)
+        _random_store_pool_versions.pop(key, None)
 
 
 def category_names(value: str) -> list[str]:
@@ -150,6 +198,43 @@ async def get_user_store(session: AsyncSession, storage: MinioStorage, user_id: 
     return store_detail(store, storage, stats.get(store.id, store_repo.StoreStats()), state.get(store.id))
 
 
+async def _cached_random_store_pool(
+    session: AsyncSession,
+    storage: MinioStorage,
+    school_id: int,
+) -> tuple[dict, ...]:
+    now = time.monotonic()
+    _prune_random_store_cache(now)
+    cached = _random_store_pools.get(school_id)
+    if cached is not None and cached.expires_at > now:
+        return cached.stores
+
+    lock = _random_store_pool_locks.setdefault(school_id, asyncio.Lock())
+    async with lock:
+        now = time.monotonic()
+        cached = _random_store_pools.get(school_id)
+        if cached is not None and cached.expires_at > now:
+            return cached.stores
+
+        version = _random_store_pool_versions.get(school_id, 0)
+        stores = await store_repo.list_active_stores_for_school(session, school_id)
+        stats = await store_repo.stats_for_stores(session, [store.id for store in stores])
+        public_stores = tuple(
+            store_detail(
+                store,
+                storage,
+                stats.get(store.id, store_repo.StoreStats()),
+            )
+            for store in stores
+        )
+        if _random_store_pool_versions.get(school_id, 0) == version:
+            _random_store_pools[school_id] = _RandomStorePool(
+                expires_at=now + RANDOM_STORE_CACHE_TTL_SECONDS,
+                stores=public_stores,
+            )
+        return public_stores
+
+
 async def random_user_store(
     session: AsyncSession,
     storage: MinioStorage,
@@ -157,21 +242,24 @@ async def random_user_store(
     exclude_store_id: int | None,
     school_id: int | None,
 ) -> tuple[dict, str]:
-    store_id = (
-        await store_repo.random_store_id(session, exclude_store_id, school_id=school_id)
-        if school_id is not None
-        else None
-    )
-    if store_id is None:
+    if school_id is None:
         raise ApiError(404, "STORE_POOL_EMPTY", "暂无可选店铺")
-    store = await store_repo.get_store(session, store_id, active_only=True)
-    if store is None:
+
+    pool = await _cached_random_store_pool(session, storage, school_id)
+    if not pool:
         raise ApiError(404, "STORE_POOL_EMPTY", "暂无可选店铺")
-    history = await add_history(session, user_id=user_id, store_id=store.id, action="random_pick")
-    await session.commit()
-    state = (await states_for_stores(session, user_id, [store.id])).get(store.id)
-    stats = (await store_repo.stats_for_stores(session, [store.id])).get(store.id, store_repo.StoreStats())
-    return store_detail(store, storage, stats, state), str(history.id)
+
+    candidates = pool
+    if exclude_store_id is not None and len(pool) > 1:
+        candidates = tuple(store for store in pool if int(store["id"]) != exclude_store_id)
+    selected = dict(secrets.choice(candidates))
+    state = await authorized_state_for_store(session, user_id, school_id, int(selected["id"]))
+    if state is None:
+        raise ApiError(401, "AUTH_REQUIRED", "用户不存在、已失效或学校信息已变化")
+    selected["is_favorite"] = state.is_favorite
+    selected["is_eaten"] = state.is_eaten
+    # 抽签结果只有在用户点击“就吃这家！”后才写入历史，避免普通浏览污染记录。
+    return selected, ""
 
 
 async def attach_image(session: AsyncSession, store: Store, image_url: str | None, storage: MinioStorage) -> None:
@@ -241,6 +329,7 @@ async def create_admin_store(session: AsyncSession, storage: MinioStorage, paylo
     await replace_categories(session, store.id, categories)
     await attach_image(session, store, payload.image_url, storage)
     await session.commit()
+    clear_random_store_cache(payload.school_id)
     store = await store_repo.get_store(session, store.id, active_only=False)
     if store is None:
         raise ApiError(500, "INTERNAL_ERROR", "店铺保存后无法读取")
@@ -250,6 +339,7 @@ async def create_admin_store(session: AsyncSession, storage: MinioStorage, paylo
 async def update_admin_store(session: AsyncSession, storage: MinioStorage, store: Store, payload) -> dict:
     if store.version != payload.version:
         raise ApiError(409, "RESOURCE_VERSION_CONFLICT", "数据已被其他管理员修改，请刷新后重试")
+    original_school_id = store.school_id
     if payload.name is not None:
         store.name = payload.name.strip()
     target_school_id = payload.school_id if "school_id" in payload.model_fields_set else store.school_id
@@ -269,6 +359,9 @@ async def update_admin_store(session: AsyncSession, storage: MinioStorage, store
         await attach_image(session, store, payload.image_url, storage)
     store.version += 1
     await session.commit()
+    clear_random_store_cache(original_school_id)
+    if target_school_id != original_school_id:
+        clear_random_store_cache(target_school_id)
     store = await store_repo.get_store(session, store.id, active_only=False)
     if store is None:
         raise ApiError(500, "INTERNAL_ERROR", "店铺保存后无法读取")

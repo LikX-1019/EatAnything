@@ -5,9 +5,8 @@ from app.repositories.users import user_stats
 
 
 async def profile(session: AsyncSession, storage: MinioStorage, user) -> dict:
+    # 用户头像属于私有媒体；在提供鉴权媒体代理前不返回可公开访问的 URL。
     avatar_url = None
-    if user.avatar:
-        avatar_url = storage.public_object_url(user.avatar.object_key)
     return {
         "id": str(user.id),
         "nickname": user.nickname,

@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!**/.env.example
 !frontend/.env.development
 !frontend/.env.test
 !frontend/.env.production
@@ -22,6 +23,8 @@ htmlcov/
 node_modules/
 dist/
 output/
+backups/
+*.dump
 
 # Local tooling and runtime output
 .playwright-cli/

@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { getStoreDetail, getStores, randomStore, recordStoreVisit, type StoreDetail } from '@/api/stores'
-import { createCheckIn as createCheckInRequest } from '@/api/checkins'
+import { confirmStoreChoice as confirmStoreChoiceRequest, getStoreDetail, getStores, randomStore, type StoreDetail } from '@/api/stores'
+import { createCheckIn as createCheckInRequest, getMyCheckIns, updateCheckIn as updateCheckInRequest, type CheckInItem } from '@/api/checkins'
 import { getFavorites, addFavorite, removeFavorite, getEaten } from '@/api/states'
 import { getHistory, type HistoryRecord } from '@/api/history'
 import type { StoreArea, StoreItem } from '@/types'
@@ -9,6 +9,7 @@ import { useUserStore } from './useUserStore'
 
 const AREA_STORAGE_KEY = 'eat-anything:area-by-school'
 const FONT_STORAGE_KEY = 'eat-anything:font-preference'
+const ALL_AREAS_ID = '__all__'
 type FontPreference = 'cheese' | 'system'
 
 function loadFontPreference(): FontPreference {
@@ -28,7 +29,7 @@ function loadAreaMap(): Record<string, string> {
       return { ...stored } as Record<string, string>
     }
   } catch {
-    // 本地存储不可用时，使用第一个真实店铺区域。
+    // 本地存储不可用时，使用默认区域筛选。
   }
   return {}
 }
@@ -37,6 +38,7 @@ export const useAppStore = defineStore('app', () => {
   const userStore = useUserStore()
   const stores = ref<StoreItem[]>([])
   const history = ref<HistoryRecord[]>([])
+  const checkIns = ref<CheckInItem[]>([])
   const areaBySchool = ref(loadAreaMap())
   const selectedAreaId = ref('')
   const currentPick = ref<StoreItem | null>(null)
@@ -60,17 +62,28 @@ export const useAppStore = defineStore('app', () => {
       const area = store.area.trim()
       if (area) uniqueAreas.add(area)
     }
-    return [...uniqueAreas].map((area) => ({ id: area, name: area }))
+    return [
+      { id: ALL_AREAS_ID, name: '全部' },
+      ...[...uniqueAreas].map((area) => ({ id: area, name: area })),
+    ]
   })
   const activeArea = computed(() => activeAreas.value.find((area) => area.id === selectedAreaId.value) ?? activeAreas.value[0])
   const activeAreaStores = computed(() => {
-    const area = activeArea.value?.name
-    return area ? activeSchoolStores.value.filter((store) => store.area.trim() === area) : []
+    if (!selectedAreaId.value || selectedAreaId.value === ALL_AREAS_ID) return activeSchoolStores.value
+    return activeSchoolStores.value.filter((store) => store.area.trim() === selectedAreaId.value)
   })
   const eatenStores = computed(() => stores.value.filter((item) => item.isEaten))
   const favoriteStores = computed(() => stores.value.filter((item) => item.isFavorite))
   const activeSchoolEatenStores = computed(() => activeSchoolStores.value.filter((item) => item.isEaten))
   const activeSchoolFavoriteStores = computed(() => activeSchoolStores.value.filter((item) => item.isFavorite))
+  const latestCheckInsByStore = computed(() => {
+    const latest = new Map<string, CheckInItem>()
+    for (const item of checkIns.value) {
+      const current = latest.get(item.storeId)
+      if (!current || new Date(item.checkedAt).getTime() > new Date(current.checkedAt).getTime()) latest.set(item.storeId, item)
+    }
+    return latest
+  })
   const isPickLocked = computed(() => lockedPickId.value !== null && currentPick.value?.id === lockedPickId.value)
   const isCurrentPickCheckedIn = computed(() => checkedInPickId.value !== null && currentPick.value?.id === checkedInPickId.value)
   const fontClass = computed(() => fontPreference.value === 'system' ? 'system-font' : 'cheese-font')
@@ -117,7 +130,7 @@ export const useAppStore = defineStore('app', () => {
     if (!behaviorLoaded.value && !behaviorPromise) {
       behaviorPromise = (async () => {
         await loadStores()
-        await Promise.all([loadFavorites(), loadEaten(), loadHistory()])
+        await Promise.all([loadFavorites(), loadEaten(), loadHistory(), loadCheckIns()])
         behaviorLoaded.value = true
       })().finally(() => {
         behaviorPromise = null
@@ -130,7 +143,7 @@ export const useAppStore = defineStore('app', () => {
     selectedAreaId.value = ''
     clearPick()
     await loadStores(true)
-    await Promise.all([loadFavorites(), loadEaten()])
+    await Promise.all([loadFavorites(), loadEaten(), loadCheckIns()])
     behaviorLoaded.value = true
   }
 
@@ -138,7 +151,7 @@ export const useAppStore = defineStore('app', () => {
     await userStore.initialize()
     await userStore.refreshProfile()
     await loadStores(true)
-    await Promise.all([loadFavorites(), loadEaten(), loadHistory()])
+    await Promise.all([loadFavorites(), loadEaten(), loadHistory(), loadCheckIns()])
     behaviorLoaded.value = true
   }
 
@@ -198,6 +211,21 @@ export const useAppStore = defineStore('app', () => {
     history.value = items
   }
 
+  async function loadCheckIns(): Promise<void> {
+    const firstPage = await getMyCheckIns({ page: 1, pageSize: 100 })
+    const items = [...firstPage.items]
+    for (let page = 2; items.length < firstPage.total; page += 1) {
+      const nextPage = await getMyCheckIns({ page, pageSize: 100 })
+      if (!nextPage.items.length) break
+      items.push(...nextPage.items)
+    }
+    checkIns.value = items
+  }
+
+  function latestCheckInForStore(storeId: string): CheckInItem | undefined {
+    return latestCheckInsByStore.value.get(String(storeId))
+  }
+
   function selectArea(areaId: string): boolean {
     if (!activeAreas.value.some((area) => area.id === areaId)) return false
     selectedAreaId.value = areaId
@@ -220,7 +248,9 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function drawRandomStore(): Promise<StoreItem> {
-    const result = await randomStore(currentPick.value?.id)
+    const schoolId = userStore.profile?.schoolId
+    if (!schoolId) throw new Error('抽取店铺前必须先选择学校')
+    const result = await randomStore(schoolId, currentPick.value?.id)
     const next = result.store
     const existingIndex = stores.value.findIndex((store) => store.id === next.id)
     if (existingIndex >= 0) stores.value.splice(existingIndex, 1, next)
@@ -270,10 +300,21 @@ export const useAppStore = defineStore('app', () => {
     return result.isFavorite
   }
 
-  async function createCheckIn(storeId: string, filePath: string, note?: string): Promise<void> {
-    await createCheckInRequest(storeId, filePath, note)
+  async function createCheckIn(storeId: string, filePath: string, note?: string): Promise<CheckInItem> {
+    const checkIn = await createCheckInRequest(storeId, filePath, note)
+    checkIns.value = [checkIn, ...checkIns.value]
     patchStoreState(storeId, { isEaten: true })
     await refreshProfileAfterWrite()
+    return checkIn
+  }
+
+  async function updateCheckIn(checkInId: string, filePath: string, note?: string): Promise<CheckInItem> {
+    const checkIn = await updateCheckInRequest(checkInId, filePath, note)
+    const index = checkIns.value.findIndex((item) => item.id === checkIn.id)
+    if (index >= 0) checkIns.value.splice(index, 1, checkIn)
+    else checkIns.value.unshift(checkIn)
+    await refreshProfileAfterWrite()
+    return checkIn
   }
 
   async function refreshProfileAfterWrite(): Promise<void> {
@@ -291,12 +332,12 @@ export const useAppStore = defineStore('app', () => {
     return detail
   }
 
-  async function recordVisit(storeId: string): Promise<void> {
+  async function confirmStoreChoice(storeId: string): Promise<void> {
+    await confirmStoreChoiceRequest(storeId)
     try {
-      await recordStoreVisit(storeId)
       await loadHistory()
     } catch {
-      // 相比打开店铺详情，记录访问历史属于次要操作。
+      // 确认选择已经写入成功；历史列表下次进入个人中心时再刷新。
     }
   }
 
@@ -307,11 +348,11 @@ export const useAppStore = defineStore('app', () => {
   }
 
   return {
-    stores, history, selectedAreaId, activeSchool, activeAreas, activeArea,
+    stores, history, checkIns, selectedAreaId, activeSchool, activeAreas, activeArea,
     activeSchoolStores, activeAreaStores, activeSchoolEatenStores, activeSchoolFavoriteStores, currentPick,
     isPickLocked, isCurrentPickCheckedIn, eatenStores, favoriteStores, storesLoaded, initialize, loadStores,
     reloadForSchool, refresh, selectArea, findStore, findArea, drawRandomStore, lockCurrentPick,
-    unlockCurrentPick, continueAfterCheckIn, patchStoreState, toggleFavorite, createCheckIn, refreshStore, recordVisit,
+    unlockCurrentPick, continueAfterCheckIn, patchStoreState, toggleFavorite, createCheckIn, updateCheckIn, latestCheckInForStore, refreshStore, confirmStoreChoice,
     fontPreference, fontClass, setFontPreference,
   }
 })

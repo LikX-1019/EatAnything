@@ -81,6 +81,9 @@ class CheckInSession:
     async def refresh(self, _value):
         return None
 
+    async def get(self, _model, _key):
+        return None
+
 
 class CheckInStorage:
     bucket = "media"
@@ -120,7 +123,7 @@ async def test_check_in_creation_persists_the_eaten_state(monkeypatch) -> None:
 
 
 async def _existing_store():
-    return object()
+    return SimpleNamespace(school_id=1)
 
 
 def test_check_in_requires_a_valid_image() -> None:

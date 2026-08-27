@@ -16,6 +16,7 @@ import FallbackImage from '../../components/FallbackImage.vue'
 const appStore = useAppStore()
 const mode = ref<'all' | 'eaten' | 'todo'>('all')
 const checkingStoreId = ref<string | null>(null)
+const resolvedCheckInImages = ref<Record<string, string>>({})
 const loading = ref(true)
 const errorMessage = ref('')
 const list = computed(() => mode.value === 'eaten'
@@ -53,6 +54,69 @@ async function toggle(store: StoreItem) {
     checkingStoreId.value = null
   }
 }
+function formatCheckInTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+function storeCheckInTime(storeId: string): string {
+  const checkIn = appStore.latestCheckInForStore(storeId)
+  return checkIn ? formatCheckInTime(checkIn.checkedAt) : ''
+}
+function setResolvedCheckInImage(storeId: string, source: string) {
+  resolvedCheckInImages.value = { ...resolvedCheckInImages.value, [storeId]: source }
+}
+function previewStoreCheckIn(store: StoreItem) {
+  const checkIn = appStore.latestCheckInForStore(store.id)
+  if (!checkIn) return
+  uni.previewImage({ urls: [resolvedCheckInImages.value[store.id] || checkIn.photoUrl] })
+}
+async function replaceStoreCheckIn(store: StoreItem) {
+  const checkIn = appStore.latestCheckInForStore(store.id)
+  if (!checkIn || checkingStoreId.value) return
+  try {
+    const filePath = await chooseCheckInImage()
+    if (!filePath) return
+    checkingStoreId.value = store.id
+    await appStore.updateCheckIn(checkIn.id, filePath)
+    delete resolvedCheckInImages.value[store.id]
+    uni.showToast({ title: '打卡图片已更新', icon: 'success' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof ApiClientError ? error.message : '修改打卡图片失败', icon: 'none' })
+  } finally {
+    checkingStoreId.value = null
+  }
+}
+async function addStoreCheckIn(store: StoreItem) {
+  if (checkingStoreId.value) return
+  try {
+    const filePath = await chooseCheckInImage()
+    if (!filePath) return
+    checkingStoreId.value = store.id
+    await appStore.createCheckIn(store.id, filePath)
+    uni.showToast({ title: '已添加新的打卡记录', icon: 'success' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof ApiClientError ? error.message : '添加打卡记录失败', icon: 'none' })
+  } finally {
+    checkingStoreId.value = null
+  }
+}
+function openCheckInHistory(store: StoreItem) {
+  uni.navigateTo({ url: `/pages/checkins/history?storeId=${encodeURIComponent(store.id)}` })
+}
+function openStoreCheckIn(store: StoreItem) {
+  const checkIn = appStore.latestCheckInForStore(store.id)
+  if (!checkIn) return toggle(store)
+  uni.showActionSheet({
+    itemList: ['查看打卡记录', '查看大图', '修改图片', '添加打卡记录'],
+    success: ({ tapIndex }) => {
+      if (tapIndex === 0) openCheckInHistory(store)
+      else if (tapIndex === 1) previewStoreCheckIn(store)
+      else if (tapIndex === 2) void replaceStoreCheckIn(store)
+      else if (tapIndex === 3) void addStoreCheckIn(store)
+    },
+  })
+}
 async function loadEaten(refresh = false) {
   loading.value = !refresh
   errorMessage.value = ''
@@ -81,10 +145,10 @@ onPullDownRefresh(() => { void loadEaten(true) })
       <view class="progress-copy"><text>{{ appStore.activeArea?.name }} 已完成探索</text><text>{{ appStore.activeSchoolEatenStores.length }} / {{ appStore.activeSchoolStores.length }}</text></view>
       <view class="progress-line"><view :style="{ width: `${appStore.activeSchoolStores.length ? (appStore.activeSchoolEatenStores.length / appStore.activeSchoolStores.length) * 100 : 0}%` }" /></view>
       <view v-if="loading" class="page-state">正在加载吃过记录…</view><view v-else-if="errorMessage" class="page-state"><text>{{ errorMessage }}</text><button class="retry-button" @tap="loadEaten()">重新加载</button></view><view v-else-if="list.length" class="store-grid">
-        <view v-for="store in list" :key="store.id" class="grid-card" :class="{ 'not-eaten': !store.isEaten }" @tap="toggle(store)">
-          <view class="image-wrap"><FallbackImage class="grid-image" :src="storeImageUrl(store)" /><text v-if="store.isEaten" class="check-mark">✓</text></view>
+        <view v-for="store in list" :key="store.id" class="grid-card" :class="{ 'not-eaten': !store.isEaten }" @tap="openStoreCheckIn(store)">
+          <view class="image-wrap"><FallbackImage class="grid-image" :src="appStore.latestCheckInForStore(store.id)?.photoUrl || storeImageUrl(store)" @tap.stop="openStoreCheckIn(store)" @resolved="setResolvedCheckInImage(store.id, $event)" /><text v-if="store.isEaten" class="check-mark">✓</text></view>
           <text class="grid-name single-line">{{ store.name }}</text>
-          <text class="grid-address single-line">{{ store.isEaten ? store.address : checkingStoreId === store.id ? '上传中…' : '点击选择图片打卡' }}</text>
+          <text class="grid-address single-line">{{ appStore.latestCheckInForStore(store.id) ? `打卡于 ${storeCheckInTime(store.id)}` : checkingStoreId === store.id ? '上传中…' : '点击选择图片打卡' }}</text>
         </view>
       </view>
       <EmptyState v-else title="还没有打卡过店铺" description="去首页抽一家，开始你的校园足迹" />

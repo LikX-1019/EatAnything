@@ -1,6 +1,8 @@
 from app.models.entities import (
     ActivityHistory,
+    AdminAuditLog,
     AdminUser,
+    AdminUserSchool,
     AppUser,
     CheckIn,
     MediaObject,
@@ -11,11 +13,14 @@ from app.models.entities import (
     StoreCategory,
     StoreImage,
     UserFavorite,
+    UserRestriction,
 )
 
 __all__ = [
     "ActivityHistory",
+    "AdminAuditLog",
     "AdminUser",
+    "AdminUserSchool",
     "AppUser",
     "CheckIn",
     "MediaObject",
@@ -26,4 +31,5 @@ __all__ = [
     "StoreCategory",
     "StoreImage",
     "UserFavorite",
+    "UserRestriction",
 ]

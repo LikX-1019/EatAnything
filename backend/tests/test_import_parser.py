@@ -40,3 +40,16 @@ async def test_invalid_status_is_rejected() -> None:
     with pytest.raises(ApiError) as error:
         await parse_rows(content, "stores.csv", get_settings())
     assert error.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_parse_school_scoped_chinese_template() -> None:
+    content = (
+        "食堂,店铺位置,店铺名称,店铺图片\n"
+        "南食堂,一楼 A 区,测试店铺,https://example.com/store.jpg\n"
+    ).encode("utf-8")
+    rows = await parse_rows(content, "stores.csv", get_settings(), target_school_id=1)
+    assert rows[0]["areaName"] == "南食堂"
+    assert rows[0]["address"] == "一楼 A 区"
+    assert rows[0]["name"] == "测试店铺"
+    assert rows[0]["imageUrl"] == "https://example.com/store.jpg"

@@ -7,6 +7,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.metrics import metrics
+
 
 class ApiError(Exception):
     def __init__(
@@ -78,5 +80,6 @@ async def integrity_error_handler(request: Request, error: IntegrityError) -> JS
 
 
 async def unhandled_error_handler(request: Request, error: Exception) -> JSONResponse:
+    metrics.observe_exception()
     request.app.state.logger.exception("unhandled_error", error_type=type(error).__name__)
     return await api_error_handler(request, ApiError(500, "INTERNAL_ERROR", "服务暂时不可用"))

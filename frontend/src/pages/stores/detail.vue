@@ -18,7 +18,6 @@ const reviewTotal = ref(0)
 const loading = ref(true)
 const errorMessage = ref('')
 const favoriteLoading = ref(false)
-const visitRecorded = ref(false)
 const isEaten = computed(() => detail.value?.isEaten ?? false)
 
 onLoad((query) => {
@@ -35,10 +34,6 @@ async function load() {
   errorMessage.value = ''
   try {
     await appStore.initialize()
-    if (!visitRecorded.value) {
-      await appStore.recordVisit(storeId.value)
-      visitRecorded.value = true
-    }
     const [nextDetail, reviewPage] = await Promise.all([
       appStore.refreshStore(storeId.value),
       getAllStoreReviews(storeId.value),
