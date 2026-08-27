@@ -53,8 +53,11 @@ npm run dev
 ```powershell
 $env:PYTHONPATH=(Resolve-Path 'backend').Path
 python -m compileall -q backend\app
-ruff check backend\app backend\tests
 pytest backend\tests -q
+
+Push-Location backend
+ruff check app tests
+Pop-Location
 
 Set-Location admin-web
 npm ci

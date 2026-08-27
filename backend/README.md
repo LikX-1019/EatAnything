@@ -71,8 +71,10 @@ backend\scripts\server_tunnel.ps1 Stop
 ```powershell
 $env:PYTHONPATH=(Resolve-Path 'backend').Path
 python -m compileall -q backend\app
-ruff check backend\app backend\tests
 pytest backend\tests -q
+Push-Location backend
+ruff check app tests
+Pop-Location
 ```
 
 生产配置变量和校验规则见 [环境变量与配置说明](../docs/configuration.md)。
