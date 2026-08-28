@@ -41,6 +41,10 @@ x-api-env: &api_env
   METRICS_ENABLED: ${METRICS_ENABLED:-true}
   METRICS_TOKEN: ${METRICS_TOKEN:-}
   TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+  WEATHER_PROVIDER: ${WEATHER_PROVIDER:-open_meteo}
+  OPEN_METEO_API_URL: ${OPEN_METEO_API_URL:-https://api.open-meteo.com/v1/forecast}
+  QWEATHER_API_HOST: ${QWEATHER_API_HOST:-}
+  QWEATHER_API_KEY: ${QWEATHER_API_KEY:-}
   SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
 
 services:
@@ -190,6 +194,22 @@ services:
         condition: service_completed_successfully
     environment: *api_env
     command: ["python", "-m", "app.workers.notifications"]
+    networks:
+      - eatanything
+
+  weather-worker:
+    image: ${API_IMAGE:-eat-anything-api:local}
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    environment: *api_env
+    command: ["python", "-m", "app.workers.weather"]
     networks:
       - eatanything
 

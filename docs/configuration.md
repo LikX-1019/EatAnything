@@ -55,6 +55,10 @@ docker compose -f deploy/compose.yml --env-file deploy/.env run --rm --no-deps d
 | 变量 | 说明 |
 | --- | --- |
 | `COMPOSE_PROJECT_NAME` | 环境唯一项目名，例如 `eatanything-prod` |
+| `WEATHER_PROVIDER` | 天气 Provider，默认 `open_meteo`，也可切换为 `qweather` |
+| `OPEN_METEO_API_URL` | Open-Meteo daily forecast 地址，通常保持默认值 |
+| `QWEATHER_API_HOST` | 和风天气专属 API Host，仅 `qweather` 模式必填 |
+| `QWEATHER_API_KEY` | 和风天气 API Key，仅 `qweather` 模式必填，禁止提交到 Git |
 | `API_IMAGE` / `ADMIN_WEB_IMAGE` | 本次发布的镜像名和版本标签 |
 | `POSTGRES_IMAGE` / `MINIO_IMAGE` / `MINIO_MC_IMAGE` | 固定版本的中间件镜像 |
 | `*_BIND_HOST` / `*_PORT` | 宿主机绑定地址和端口 |

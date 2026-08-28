@@ -1,7 +1,20 @@
 import { defineStore } from 'pinia'
 import { api } from '../api/client'
 
-export interface SchoolOption { id: string; schoolCode: string; name: string; status: string; areas: Array<Record<string, any>> }
+export interface SchoolOption {
+  id: string
+  schoolCode: string
+  name: string
+  city?: string | null
+  district?: string | null
+  address?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  status: string
+  storeCount?: number
+  userCount?: number
+  areas: Array<Record<string, any>>
+}
 
 export const useWorkspaceStore = defineStore('workspace', {
   state: () => ({ schools: [] as SchoolOption[], schoolId: '', fontMode: localStorage.getItem('admin_font_mode') || 'journal' }),

@@ -31,6 +31,18 @@ export interface UserProfile {
   createdAt: string
 }
 
+export interface SchoolWeatherData {
+  schoolId: string
+  forecastDate: string
+  temperatureMin: number
+  temperatureMax: number
+  weatherCode: string
+  weatherText: string
+  icon: string
+  updatedAt: string
+  source: 'open_meteo' | 'qweather'
+}
+
 export interface ProfileUpdate {
   nickname?: string
   slogan?: string | null
@@ -48,6 +60,10 @@ export function getSchools(): Promise<SchoolSummary[]> {
 
 export function selectUserSchool(schoolId: string): Promise<UserProfile> {
   return put<UserProfile>(`/me/school/${encodeURIComponent(schoolId)}`)
+}
+
+export function getCurrentSchoolWeather(): Promise<SchoolWeatherData> {
+  return get<SchoolWeatherData>('/me/weather')
 }
 
 export function updateProfile(payload: ProfileUpdate): Promise<UserProfile> {

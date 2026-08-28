@@ -102,11 +102,12 @@ onPullDownRefresh(() => { void loadProfile(true) })
         </view>
         <view v-else class="avatar">👩🏻‍🍳</view>
         <view class="identity-copy">
-          <text class="profile-name">{{ userStore.profile?.nickname || '正在登录…' }}</text>
+          <view class="identity-title-row">
+            <text class="profile-name">{{ userStore.profile?.nickname || '正在登录…' }}</text>
+            <text class="profile-school">{{ userStore.profile?.school?.name || '尚未选择学校' }}</text>
+          </view>
           <text class="profile-slogan">{{ userStore.profile?.slogan || '今天也要好好吃饭' }}</text>
-          <text class="profile-school">{{ userStore.profile?.school?.name || '尚未选择学校' }}</text>
           <text class="level">Lv.{{ userStore.profile?.level ?? 0 }}</text>
-          <text class="edit-hint">点击编辑资料 ›</text>
         </view>
       </view>
       <view class="stats">
@@ -116,6 +117,7 @@ onPullDownRefresh(() => { void loadProfile(true) })
         <view class="divider" />
         <view class="stat"><text>{{ userStore.profile?.stats.favoriteCount ?? 0 }}</text><small>收藏的店铺</small></view>
       </view>
+      <text class="edit-hint">点击编辑资料 ›</text>
     </view>
     <view class="menu-list">
       <template v-for="item in menuItems" :key="item.key">
@@ -148,11 +150,12 @@ onPullDownRefresh(() => { void loadProfile(true) })
 .avatar { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 126rpx; height: 126rpx; overflow: hidden; border: 5rpx solid #fff; border-radius: 50%; background: #f7dfc9; font-size: 57rpx; box-shadow: 0 0 0 2rpx #e7c7ad, 0 5rpx 10rpx rgba(95,62,37,.12); }
 .avatar-image-frame { flex: 0 0 126rpx; }
 .avatar-image { display: block; width: 100%; height: 100%; border-radius: 50%; }
-.identity-copy { padding-left: 24rpx; }
+.identity-copy { min-width: 0; flex: 1; padding-left: 24rpx; }
+.identity-title-row { display: flex; align-items: baseline; min-width: 0; }
 .profile-name, .profile-slogan { display: block; }
-.profile-name { font-size: 41rpx; font-weight: 900; }.profile-slogan { margin-top: 8rpx; color: var(--muted); font-size: 25rpx; }.level { width: fit-content; margin-top: 8rpx; padding: 4rpx 11rpx; border-radius: 8rpx; background: #ec9350; color: #fff; font-size: 21rpx; font-weight: 900; }
-.profile-school { display: block; margin-top: 6rpx; color: var(--brand-deep); font-size: 22rpx; }
-.edit-hint { display: block; margin-top: 8rpx; color: var(--muted); font-size: 20rpx; text-decoration: underline; }
+.profile-name { min-width: 0; overflow: hidden; font-size: 41rpx; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }.profile-slogan { margin-top: 8rpx; color: var(--muted); font-size: 25rpx; }.level { width: fit-content; margin-top: 8rpx; padding: 4rpx 11rpx; border-radius: 8rpx; background: #ec9350; color: #fff; font-size: 21rpx; font-weight: 900; }
+.profile-school { display: block; flex: 0 0 auto; margin-left: 28rpx; color: var(--brand-deep); font-size: 22rpx; white-space: nowrap; }
+.edit-hint { display: block; margin: 14rpx auto 0; color: var(--muted); font-size: 20rpx; text-align: center; text-decoration: underline; }
 .stats { display: flex; align-items: center; padding: 22rpx 10rpx; border: 2rpx dashed #d69c71; border-radius: 17rpx; background: rgba(255,253,246,.8); color: var(--ink); }
 .stat { display: flex; flex: 1; align-items: center; flex-direction: column; }
 .stat text { font-size: 39rpx; font-weight: 900; }.stat small { margin-top: 7rpx; color: #6d5745; font-size: 23rpx; }

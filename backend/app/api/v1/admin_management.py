@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
-from pydantic import Field
+from pydantic import Field, model_validator
 from sqlalchemy import delete, func, or_, select
 
 from app.api.v1.utils import response
+from app.core.config import get_settings
 from app.core.dependencies import AdminDep, SessionDep, get_minio
 from app.core.errors import ApiError
 from app.core.security import hash_password
@@ -29,6 +31,7 @@ from app.schemas.common import SchemaBase
 from app.services.admin_scope import admin_school_ids, ensure_school_allowed, is_platform_admin, scoped_school_id
 from app.services.moderation import add_audit_log, restriction_active
 from app.services.messages import create_system_message
+from app.services.weather import invalidate_school_weather
 
 
 router = APIRouter(prefix="/admin", tags=["Admin Management"])
@@ -40,7 +43,15 @@ class SchoolCreate(SchemaBase):
     city: str | None = Field(default=None, max_length=60)
     district: str | None = Field(default=None, max_length=60)
     address: str | None = Field(default=None, max_length=255)
+    latitude: Decimal | None = Field(default=None, ge=Decimal("-90"), le=Decimal("90"))
+    longitude: Decimal | None = Field(default=None, ge=Decimal("-180"), le=Decimal("180"))
     status: str = Field(default="active", pattern="^(active|hidden)$")
+
+    @model_validator(mode="after")
+    def coordinates_are_paired(self) -> "SchoolCreate":
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("经纬度必须同时填写")
+        return self
 
 
 class SchoolUpdate(SchemaBase):
@@ -48,7 +59,18 @@ class SchoolUpdate(SchemaBase):
     city: str | None = Field(default=None, max_length=60)
     district: str | None = Field(default=None, max_length=60)
     address: str | None = Field(default=None, max_length=255)
+    latitude: Decimal | None = Field(default=None, ge=Decimal("-90"), le=Decimal("90"))
+    longitude: Decimal | None = Field(default=None, ge=Decimal("-180"), le=Decimal("180"))
     status: str | None = Field(default=None, pattern="^(active|hidden)$")
+
+    @model_validator(mode="after")
+    def coordinates_are_paired(self) -> "SchoolUpdate":
+        coordinate_fields = self.model_fields_set & {"latitude", "longitude"}
+        if coordinate_fields and coordinate_fields != {"latitude", "longitude"}:
+            raise ValueError("经纬度必须同时填写")
+        if coordinate_fields and (self.latitude is None) != (self.longitude is None):
+            raise ValueError("经纬度必须同时填写或同时清空")
+        return self
 
 
 class AreaCreate(SchemaBase):
@@ -211,6 +233,8 @@ async def list_admin_schools(request: Request, admin: AdminDep, session: Session
                 "city": school.city,
                 "district": school.district,
                 "address": school.address,
+                "latitude": float(school.latitude) if school.latitude is not None else None,
+                "longitude": float(school.longitude) if school.longitude is not None else None,
                 "status": school.status,
                 "store_count": store_count,
                 "user_count": user_count,
@@ -251,10 +275,36 @@ async def update_school(school_id: int, payload: SchoolUpdate, request: Request,
     school = await session.get(School, school_id)
     if school is None:
         raise ApiError(404, "SCHOOL_NOT_FOUND", "学校不存在")
-    before = {"name": school.name, "status": school.status}
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    before = {
+        "name": school.name,
+        "status": school.status,
+        "latitude": str(school.latitude) if school.latitude is not None else None,
+        "longitude": str(school.longitude) if school.longitude is not None else None,
+    }
+    old_coordinates = (school.latitude, school.longitude)
+    updates = payload.model_dump(exclude_unset=True)
+    for key, value in updates.items():
         setattr(school, key, value)
-    add_audit_log(session, request, admin, action="school.update", target_type="school", target_id=school.id, school_id=school.id, before=before, after={"name": school.name, "status": school.status})
+    coordinates_changed = old_coordinates != (school.latitude, school.longitude)
+    if coordinates_changed:
+        await invalidate_school_weather(session, school.id, get_settings().app_timezone)
+    add_audit_log(
+        session,
+        request,
+        admin,
+        action="school.update",
+        target_type="school",
+        target_id=school.id,
+        school_id=school.id,
+        before=before,
+        after={
+            "name": school.name,
+            "status": school.status,
+            "latitude": str(school.latitude) if school.latitude is not None else None,
+            "longitude": str(school.longitude) if school.longitude is not None else None,
+            "weather_cache_invalidated": coordinates_changed,
+        },
+    )
     await session.commit()
     return response(request, {"id": str(school.id)})
 

@@ -370,6 +370,7 @@ npm run verify:production
 | `db-init` | 与 `api` 同镜像 | 一次性：数据库版本 stamp/upgrade |
 | `minio` | `minio/minio` | 对象存储服务 |
 | `notification-worker` | 与 `api` 相同 | 展开 PostgreSQL 发送队列、发送微信订阅消息并重试 |
+| `weather-worker` | 与 `api` 相同 | 每天 06:00 按学校坐标更新当天及次日天气缓存，缺失时每 30 分钟补抓 |
 | `minio-init` | `minio/mc` | 一次性：幂等创建存储桶 |
 | `api` | 本项目构建 | FastAPI（uvicorn `app.main:app`） |
 | `admin-web` | 本项目构建 | 独立 Vue 3 管理站及 `/api/` 反向代理 |

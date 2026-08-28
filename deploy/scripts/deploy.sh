@@ -47,6 +47,7 @@ print_failure_diagnostics() {
     "${COMPOSE[@]}" ps -a >&2 || true
     printf '\n[deploy] 可使用以下命令查看日志：\n' >&2
     print_compose_command logs api --tail=200 >&2
+    print_compose_command logs weather-worker --tail=200 >&2
     print_compose_command logs postgres --tail=200 >&2
     print_compose_command logs minio --tail=200 >&2
     if [[ "${ENABLE_CADDY_VALUE}" == "1" ]]; then
@@ -352,7 +353,7 @@ main() {
     if [[ "${NO_CACHE}" == "1" ]]; then
         build_args+=(--no-cache)
     fi
-    log "构建 api 与 admin-web 镜像（db-init、api 与 notification-worker 共用 API 镜像）..."
+    log "构建 api 与 admin-web 镜像（db-init、api 与两个 Worker 共用 API 镜像）..."
     "${COMPOSE[@]}" "${build_args[@]}" api admin-web
 
     if [[ "$(read_env_value APP_ENV || true)" == "production" || "$(read_env_value APP_ENV || true)" == "prod" ]]; then
@@ -389,6 +390,11 @@ main() {
     log "API 已健康，开始启动或更新 notification-worker..."
     "${COMPOSE[@]}" up -d --no-deps notification-worker
     wait_for_running notification-worker
+
+    CURRENT_STEP="启动或更新天气 Worker"
+    log "API 已健康，开始启动或更新 weather-worker..."
+    "${COMPOSE[@]}" up -d --no-deps weather-worker
+    wait_for_running weather-worker
 
     CURRENT_STEP="启动或更新 Web 管理后台"
     log "API 已健康，开始启动或更新 admin-web..."
@@ -431,6 +437,7 @@ main() {
     printf 'db-init: passed\n'
     printf 'api: healthy\n\n'
     printf 'notification-worker: running\n\n'
+    printf 'weather-worker: running\n\n'
     printf 'admin-web: healthy\n\n'
     if [[ "${ENABLE_CADDY_VALUE}" == "1" ]]; then
         printf 'caddy: healthy\n\n'

@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     metrics_enabled: bool = Field(default=True, validation_alias="METRICS_ENABLED")
     metrics_token: str | None = Field(default=None, validation_alias="METRICS_TOKEN")
     trusted_proxy_ips: str = Field(default="", validation_alias="TRUSTED_PROXY_IPS")
+    weather_provider: str = Field(default="open_meteo", validation_alias="WEATHER_PROVIDER")
+    open_meteo_api_url: str = Field(
+        default="https://api.open-meteo.com/v1/forecast",
+        validation_alias="OPEN_METEO_API_URL",
+    )
+    qweather_api_host: str | None = Field(default=None, validation_alias="QWEATHER_API_HOST")
+    qweather_api_key: str | None = Field(default=None, validation_alias="QWEATHER_API_KEY")
 
     model_config = SettingsConfigDict(
         env_file=str(PROJECT_ROOT / ".env"),
@@ -104,7 +111,28 @@ class Settings(BaseSettings):
             missing = [name for name, value in required.items() if not value or not value.strip()]
             if missing:
                 raise ValueError(f"微信订阅消息已启用，但缺少配置：{', '.join(missing)}")
+        self.weather_provider = self.weather_provider.strip().lower()
+        if self.weather_provider not in {"open_meteo", "qweather"}:
+            raise ValueError("WEATHER_PROVIDER 只允许 open_meteo 或 qweather")
+        if self.weather_provider == "qweather":
+            missing_weather = [
+                name
+                for name, value in {
+                    "QWEATHER_API_HOST": self.qweather_api_host,
+                    "QWEATHER_API_KEY": self.qweather_api_key,
+                }.items()
+                if not value or not value.strip()
+            ]
+            if missing_weather:
+                raise ValueError(f"和风天气已启用，但缺少配置：{', '.join(missing_weather)}")
+            self._validate_weather_host(self.qweather_api_host or "")
         return self
+
+    @staticmethod
+    def _validate_weather_host(value: str) -> None:
+        parsed = urlparse(value.strip() if "://" in value else f"https://{value.strip()}")
+        if parsed.scheme != "https" or not parsed.hostname:
+            raise ValueError("QWEATHER_API_HOST 必须是有效的 HTTPS 专属 Host")
 
     def wechat_template(self, kind: str) -> tuple[str, str, str, str] | None:
         values = (

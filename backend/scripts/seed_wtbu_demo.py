@@ -98,6 +98,8 @@ async def _upsert_school(session) -> School:
     school.city = "武汉市"
     school.district = "洪山区"
     school.address = "湖北省武汉市洪山区黄家湖西路3号"
+    school.latitude = 30.460717
+    school.longitude = 114.268004
     school.status = "active"
     await session.flush()
     return school

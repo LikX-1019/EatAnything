@@ -15,16 +15,18 @@ from app.api.v1.utils import response, school_id as parse_school_id
 from app.core.dependencies import SessionDep, SettingsDep, UserDep, get_minio
 from app.core.errors import ApiError
 from app.integrations.minio import MinioStorage
-from app.models import MediaObject, School
+from app.models import MediaObject, School, SchoolWeatherDaily
 from app.schemas.common import ApiResponse
 from app.schemas.users import (
     AvatarUploadData,
     AvatarUploadDataRequest,
     ProfileUpdate,
     SchoolSummary,
+    SchoolWeatherData,
     UserProfile,
 )
 from app.services.users import profile
+from app.services.weather import local_today
 
 
 router = APIRouter(tags=["User"])
@@ -109,6 +111,44 @@ async def list_schools(request: Request, user: UserDep, session: SessionDep):
         for school in schools
     ]
     return response(request, data)
+
+
+@router.get("/me/weather", response_model=ApiResponse[SchoolWeatherData])
+async def current_school_weather(
+    request: Request,
+    user: UserDep,
+    session: SessionDep,
+    settings: SettingsDep,
+):
+    if user.school_id is None:
+        raise ApiError(400, "SCHOOL_NOT_SELECTED", "请先选择学校")
+    school = await session.get(School, user.school_id)
+    if school is None or school.status != "active":
+        raise ApiError(404, "SCHOOL_NOT_FOUND", "学校不存在或已不可用")
+    if school.latitude is None or school.longitude is None:
+        raise ApiError(422, "SCHOOL_COORDINATES_MISSING", "该学校尚未配置天气坐标")
+    weather = await session.scalar(
+        select(SchoolWeatherDaily).where(
+            SchoolWeatherDaily.school_id == school.id,
+            SchoolWeatherDaily.forecast_date == local_today(settings.app_timezone),
+        )
+    )
+    if weather is None:
+        raise ApiError(503, "WEATHER_NOT_READY", "学校天气正在更新，请稍后再试")
+    return response(
+        request,
+        {
+            "school_id": str(school.id),
+            "forecast_date": weather.forecast_date,
+            "temperature_min": float(weather.temperature_min),
+            "temperature_max": float(weather.temperature_max),
+            "weather_code": weather.weather_code,
+            "weather_text": weather.weather_text,
+            "icon": weather.icon,
+            "updated_at": weather.fetched_at,
+            "source": weather.provider,
+        },
+    )
 
 
 @router.put("/me/school/{schoolId}", response_model=ApiResponse[UserProfile])

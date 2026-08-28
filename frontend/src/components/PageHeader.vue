@@ -1,5 +1,28 @@
 <script setup lang="ts">
-const props = withDefaults(defineProps<{ title?: string; compact?: boolean; back?: boolean; dark?: boolean; weather?: boolean; backTabFallback?: string }>(), { title: '', compact: false, back: false, dark: false, weather: false, backTabFallback: '' })
+import { computed } from 'vue'
+import type { SchoolWeatherData } from '../api/users'
+
+const props = withDefaults(defineProps<{
+  title?: string
+  compact?: boolean
+  back?: boolean
+  dark?: boolean
+  weather?: boolean
+  weatherData?: SchoolWeatherData | null
+  weatherLoading?: boolean
+  weatherError?: boolean
+  backTabFallback?: string
+}>(), {
+  title: '',
+  compact: false,
+  back: false,
+  dark: false,
+  weather: false,
+  weatherData: null,
+  weatherLoading: false,
+  weatherError: false,
+  backTabFallback: '',
+})
 const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 24
 let navBarHeight = 44
 
@@ -13,6 +36,35 @@ try {
 }
 
 const headerHeight = statusBarHeight + navBarHeight
+function temperature(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1)
+}
+const weatherCopy = computed(() => {
+  if (props.weatherLoading) return '天气读取中'
+  if (!props.weatherData || props.weatherError) return '天气暂不可用'
+  return `${temperature(props.weatherData.temperatureMin)}~${temperature(props.weatherData.temperatureMax)}°C ${props.weatherData.weatherText}`
+})
+const weatherIcon = computed(() => props.weatherData?.icon || '🌤️')
+
+function showWeatherDetails() {
+  if (!props.weatherData) {
+    uni.showToast({ title: '天气暂不可用', icon: 'none' })
+    return
+  }
+  const updatedAt = new Date(props.weatherData.updatedAt)
+  const updatedCopy = Number.isNaN(updatedAt.getTime())
+    ? props.weatherData.updatedAt
+    : updatedAt.toLocaleString()
+  const source = props.weatherData.source === 'open_meteo'
+    ? 'Open-Meteo / CC BY 4.0'
+    : '和风天气'
+  uni.showModal({
+    title: '学校天气',
+    content: `预报日期：${props.weatherData.forecastDate}\n更新时间：${updatedCopy}\n数据来源：${source}`,
+    showCancel: false,
+    confirmText: '知道了',
+  })
+}
 function goBack() {
   uni.navigateBack({
     fail: () => {
@@ -37,9 +89,9 @@ function goBack() {
     <view :style="{ height: `${statusBarHeight}px` }" />
     <view v-if="props.title" class="title-row" :style="{ height: `${navBarHeight}px` }">
       <view v-if="props.back" class="back-button" @tap="goBack">‹</view>
-      <view v-if="props.weather" class="header-weather">
-        <text class="header-weather-icon">🌤️</text>
-        <text class="header-weather-copy">28°C 多云</text>
+      <view v-if="props.weather" class="header-weather" @tap="showWeatherDetails">
+        <text class="header-weather-icon">{{ weatherIcon }}</text>
+        <text class="header-weather-copy">{{ weatherCopy }}</text>
       </view>
       <view class="title-sticker"><text class="tape" /><text class="title">{{ props.title }}</text><text class="doodle">✿</text></view>
     </view>
@@ -55,7 +107,7 @@ function goBack() {
 .tape { position: absolute; top: -9rpx; left: 18rpx; width: 46rpx; height: 26rpx; background: rgba(231,201,157,.62); transform: rotate(6deg); }
 .title { color: var(--ink); font-size: 38rpx; font-weight: 900; letter-spacing: 2rpx; }
 .doodle { position: absolute; right: 22rpx; color: var(--brand); font-size: 28rpx; }
-.header-weather { position: absolute; z-index: 2; left: 18rpx; display: flex; align-items: center; justify-content: center; width: 176rpx; height: 54rpx; padding: 0 10rpx; border: 1rpx solid #e5d0b1; background: rgba(255,250,238,.96); box-shadow: 0 3rpx 8rpx rgba(100,72,40,.09); transform: rotate(-.7deg); }
+.header-weather { position: absolute; z-index: 2; left: 18rpx; display: flex; align-items: center; justify-content: center; width: 190rpx; height: 54rpx; padding: 0 10rpx; border: 1rpx solid #e5d0b1; background: rgba(255,250,238,.96); box-shadow: 0 3rpx 8rpx rgba(100,72,40,.09); transform: rotate(-.7deg); }
 .header-weather::before { position: absolute; top: -6rpx; left: 38rpx; width: 49rpx; height: 14rpx; background: rgba(238,201,152,.48); content: ''; }
 .header-weather-icon { flex: 0 0 auto; margin-right: 7rpx; font-size: 28rpx; }
 .header-weather-copy { overflow: hidden; color: var(--ink); font-size: 20rpx; font-weight: 800; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
@@ -65,7 +117,7 @@ function goBack() {
 .compact .title-row { min-height: 34rpx; }
 
 @media (max-width: 350px) {
-  .header-weather { left: 12rpx; width: 160rpx; padding: 0 7rpx; }
+  .header-weather { left: 12rpx; width: 170rpx; padding: 0 7rpx; }
   .header-weather-icon { margin-right: 4rpx; font-size: 25rpx; }
   .header-weather-copy { font-size: 19rpx; }
 }

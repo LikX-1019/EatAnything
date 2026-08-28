@@ -10,12 +10,14 @@ import StickerTabBar from '../../components/StickerTabBar.vue'
 import { useAppStore } from '../../stores/useAppStore'
 import { useUserStore } from '../../stores/useUserStore'
 import { useMessageStore } from '../../stores/useMessageStore'
+import { useWeatherStore } from '../../stores/useWeatherStore'
 import { storeImageUrl, storeScoreLabel } from '../../utils/store'
 import { syncTabBarSelected } from '../../utils/tabbar'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
 const messageStore = useMessageStore()
+const weatherStore = useWeatherStore()
 const isDrawing = ref(false)
 const isConfirmingPick = ref(false)
 const isCheckingIn = ref(false)
@@ -39,6 +41,8 @@ async function loadHome(refresh = false) {
     if (refresh) await appStore.refresh()
     else await appStore.initialize()
     await messageStore.refreshAnnouncements()
+    const schoolId = userStore.profile?.schoolId
+    if (schoolId) void weatherStore.loadForSchool(schoolId, refresh)
     if (!userStore.profile?.schoolId && !onboardingRedirected && !uni.getStorageSync('onboarding_dismissed')) {
       onboardingRedirected = true
       uni.redirectTo({ url: '/pages/onboarding/index' })
@@ -218,7 +222,13 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
 
 <template>
   <view class="page-shell home-page" :class="appStore.fontClass">
-    <PageHeader title="今天吃什么" weather />
+    <PageHeader
+      title="今天吃什么"
+      weather
+      :weather-data="weatherStore.currentWeather"
+      :weather-loading="weatherStore.isLoading"
+      :weather-error="Boolean(weatherStore.currentError)"
+    />
     <view class="content-width home-content">
       <view v-if="loading" class="page-state">正在加载首页…</view>
       <view v-else-if="loadError" class="page-state"><text>{{ loadError }}</text><button class="retry-button" @tap="loadHome()">重新加载</button></view>

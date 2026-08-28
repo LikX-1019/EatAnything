@@ -48,6 +48,7 @@ docker compose -f deploy/compose.yml --env-file deploy/.env run --rm --no-deps d
 - [ ] 评论和打卡照片可隐藏、恢复，审计日志完整。
 - [ ] 通知和公告可按权限创建、定时发布、阅读与撤回，首页公告和消息未读数正常。
 - [ ] `notification-worker` 处于 running；测试账号可完成两套模板授权并收到测试订阅消息，失败任务无持续重试风暴。
+- [ ] `weather-worker` 处于 running；正式库已有当天及次日学校天气缓存，首页天气失败不会阻塞核心内容。
 - [ ] 小程序登录、学校切换、店铺、随机、收藏、打卡、评论和图片显示正常。
 - [ ] 微信公众平台的 `request`、`uploadFile`、`downloadFile` 合法域名已登记。
 - [ ] 观察 15 至 30 分钟：无持续 5xx、容器重启、磁盘告警或异常登录。

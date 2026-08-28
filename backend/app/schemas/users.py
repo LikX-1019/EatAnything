@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import field_validator
@@ -73,3 +73,15 @@ class AvatarUploadDataRequest(SchemaBase):
 
     data_base64: str
     content_type: str = "image/jpeg"
+
+
+class SchoolWeatherData(SchemaBase):
+    school_id: str
+    forecast_date: date
+    temperature_min: float
+    temperature_max: float
+    weather_code: str
+    weather_text: str
+    icon: str
+    updated_at: datetime
+    source: str

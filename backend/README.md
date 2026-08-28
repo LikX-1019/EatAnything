@@ -64,7 +64,9 @@ backend\scripts\server_tunnel.ps1 Stop
 
 ## 生产部署
 
-服务器端使用 Docker Compose 部署 PostgreSQL、MinIO、API、通知 Worker、Web 管理后台和可选的 Caddy HTTPS 入口，完整步骤见仓库根目录的 [deploy/README.md](../deploy/README.md)。部署环境变量使用 `deploy/.env`，与本机开发的仓库根目录 `.env` 相互独立。
+服务器端使用 Docker Compose 部署 PostgreSQL、MinIO、API、通知 Worker、天气 Worker、Web 管理后台和可选的 Caddy HTTPS 入口，完整步骤见仓库根目录的 [deploy/README.md](../deploy/README.md)。部署环境变量使用 `deploy/.env`，与本机开发的仓库根目录 `.env` 相互独立。
+
+天气 Worker 使用 `python -m app.workers.weather` 启动，按学校 WGS84 坐标维护当天及次日天气缓存；每天 `06:00`（`APP_TIMEZONE`）更新，缺失或失败时每 30 分钟补抓。默认 `WEATHER_PROVIDER=open_meteo`；切换为 `qweather` 时必须配置 `QWEATHER_API_HOST` 和 `QWEATHER_API_KEY`。
 
 ## 验证
 

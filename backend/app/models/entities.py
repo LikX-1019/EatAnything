@@ -295,6 +295,26 @@ class PlatformMessage(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
 
 
+class SchoolWeatherDaily(Base):
+    __tablename__ = "school_weather_daily"
+    __table_args__ = (
+        UniqueConstraint("school_id", "forecast_date", name="uq_school_weather_daily_school_date"),
+    )
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    school_id: Mapped[int] = mapped_column(ForeignKey("schools.id", ondelete="CASCADE"), nullable=False)
+    forecast_date: Mapped[date] = mapped_column(Date, nullable=False)
+    temperature_min: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    temperature_max: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    weather_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    weather_text: Mapped[str] = mapped_column(String(80), nullable=False)
+    icon: Mapped[str] = mapped_column(String(16), nullable=False)
+    provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    school: Mapped[School] = relationship(lazy="joined")
+
+
 class MessageMediaLink(Base):
     __tablename__ = "message_media_links"
     message_id: Mapped[int] = mapped_column(ForeignKey("platform_messages.id", ondelete="CASCADE"), primary_key=True)

@@ -5,10 +5,12 @@ import { ApiClientError } from '../../api/types'
 import type { SchoolSummary } from '../../api/users'
 import { useAppStore } from '../../stores/useAppStore'
 import { useUserStore } from '../../stores/useUserStore'
+import { useWeatherStore } from '../../stores/useWeatherStore'
 import PageHeader from '../../components/PageHeader.vue'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
+const weatherStore = useWeatherStore()
 const keyword = ref('')
 const selectingSchoolId = ref<string | null>(null)
 const loading = ref(true)
@@ -27,6 +29,7 @@ async function selectSchool(id: string) {
     await userStore.selectSchool(id)
     uni.removeStorageSync('onboarding_dismissed')
     await appStore.reloadForSchool()
+    void weatherStore.loadForSchool(id, true)
     uni.navigateBack()
   } catch (error) {
     uni.showToast({ title: error instanceof ApiClientError ? error.message : '学校切换失败', icon: 'none' })
