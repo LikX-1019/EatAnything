@@ -31,3 +31,12 @@ test('未读数失败不会阻塞个人资料页面', () => {
   assert.match(profile, /void messageStore\.refreshUnread\(\)\.catch\(\(\) => undefined\)/)
   assert.doesNotMatch(profile, /await messageStore\.refreshUnread\(\)/)
 })
+
+
+test('个人页头像由原生圆形外框裁剪', () => {
+  const profile = readFileSync('src/pages/profile/index.vue', 'utf8')
+
+  assert.match(profile, /<view v-if="userStore\.profile\?\.avatarUrl" class="avatar avatar-image-frame">/)
+  assert.match(profile, /\.avatar \{[^}]*overflow: hidden;[^}]*border-radius: 50%;/)
+  assert.match(profile, /\.avatar-image \{[^}]*width: 100%;[^}]*height: 100%;[^}]*border-radius: 50%;/)
+})

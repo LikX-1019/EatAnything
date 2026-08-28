@@ -97,7 +97,9 @@ onPullDownRefresh(() => { void loadProfile(true) })
     <PageHeader title="我的" dark />
     <view v-if="loading" class="profile-state">正在加载个人资料…</view><view v-else-if="errorMessage" class="profile-state"><text>{{ errorMessage }}</text><button class="retry-button" @tap="loadProfile()">重新加载</button></view><template v-else><view class="profile-hero" hover-class="tap-active" @tap="editProfile">
       <view class="identity">
-        <FallbackImage v-if="userStore.profile?.avatarUrl" class="avatar avatar-image" :src="userStore.profile.avatarUrl" />
+        <view v-if="userStore.profile?.avatarUrl" class="avatar avatar-image-frame">
+          <FallbackImage class="avatar-image" :src="userStore.profile.avatarUrl" />
+        </view>
         <view v-else class="avatar">👩🏻‍🍳</view>
         <view class="identity-copy">
           <text class="profile-name">{{ userStore.profile?.nickname || '正在登录…' }}</text>
@@ -143,8 +145,9 @@ onPullDownRefresh(() => { void loadProfile(true) })
 .profile-hero { position: relative; z-index: 1; margin: 14rpx 26rpx 0; padding: 22rpx 18rpx 20rpx; border: 1rpx solid #e1c8a5; border-radius: 5rpx 12rpx 7rpx 9rpx; background: #fffaf0; color: var(--ink); box-shadow: var(--paper-shadow); }
 .profile-hero::before, .profile-hero::after { position: absolute; top: -11rpx; width: 84rpx; height: 27rpx; background: rgba(228,192,142,.48); content: ''; }.profile-hero::before { left: 25rpx; transform: rotate(-7deg); }.profile-hero::after { right: 25rpx; transform: rotate(7deg); }
 .identity { display: flex; align-items: center; padding: 16rpx 16rpx 30rpx; }
-.avatar { display: flex; align-items: center; justify-content: center; width: 126rpx; height: 126rpx; border: 5rpx solid #fff; border-radius: 50%; background: #f7dfc9; font-size: 57rpx; box-shadow: 0 0 0 2rpx #e7c7ad, 0 5rpx 10rpx rgba(95,62,37,.12); }
-.avatar-image { display: block; padding: 0; }
+.avatar { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 126rpx; height: 126rpx; overflow: hidden; border: 5rpx solid #fff; border-radius: 50%; background: #f7dfc9; font-size: 57rpx; box-shadow: 0 0 0 2rpx #e7c7ad, 0 5rpx 10rpx rgba(95,62,37,.12); }
+.avatar-image-frame { flex: 0 0 126rpx; }
+.avatar-image { display: block; width: 100%; height: 100%; border-radius: 50%; }
 .identity-copy { padding-left: 24rpx; }
 .profile-name, .profile-slogan { display: block; }
 .profile-name { font-size: 41rpx; font-weight: 900; }.profile-slogan { margin-top: 8rpx; color: var(--muted); font-size: 25rpx; }.level { width: fit-content; margin-top: 8rpx; padding: 4rpx 11rpx; border-radius: 8rpx; background: #ec9350; color: #fff; font-size: 21rpx; font-weight: 900; }
