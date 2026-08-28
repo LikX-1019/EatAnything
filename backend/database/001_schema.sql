@@ -245,7 +245,7 @@ CREATE TABLE IF NOT EXISTS activity_history (
     event_key VARCHAR(100) UNIQUE,
     user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
     store_id BIGINT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
-    action VARCHAR(30) NOT NULL CHECK (action IN ('random_pick', 'store_view')),
+    action VARCHAR(30) NOT NULL CHECK (action IN ('random_pick', 'store_view', 'confirmed_pick')),
     occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

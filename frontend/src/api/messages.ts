@@ -5,7 +5,18 @@ export interface MessageItem{id:string;kind:MessageKind;source:string;eventType?
 export interface MessagePage{items:MessageItem[];page:number;pageSize:number;total:number}
 export interface NotificationSettings{available:boolean;wechatEnabled:boolean;templates:Record<MessageKind,{templateId?:string|null;status:string}>}
 
-export function getMessages(params:{kind?:MessageKind;unreadOnly?:boolean;page?:number;pageSize?:number}={}){return get<MessagePage,typeof params>('/me/messages',params)}
+export interface MessageQuery { kind?: MessageKind; unreadOnly?: boolean; page?: number; pageSize?: number }
+interface MessageQueryPayload { kind?: MessageKind; unread_only?: boolean; page: number; page_size: number }
+
+export function getMessages(params: MessageQuery = {}) {
+  const query: MessageQueryPayload = {
+    page: params.page ?? 1,
+    page_size: params.pageSize ?? 20,
+  }
+  if (params.kind) query.kind = params.kind
+  if (params.unreadOnly !== undefined) query.unread_only = params.unreadOnly
+  return get<MessagePage, MessageQueryPayload>('/me/messages', query)
+}
 export function getUnreadCount(){return get<{count:number}>('/me/messages/unread-count')}
 export function getMessage(id:string){return get<MessageItem>(`/me/messages/${encodeURIComponent(id)}`)}
 export function markMessageRead(id:string){return post(`/me/messages/${encodeURIComponent(id)}/read`)}

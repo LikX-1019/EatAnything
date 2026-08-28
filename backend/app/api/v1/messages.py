@@ -20,6 +20,7 @@ from app.services.messages import (
 
 
 router = APIRouter(prefix="/me", tags=["Messages"])
+MESSAGE_KINDS = {"notification", "announcement"}
 
 
 def parse_message_id(value: str) -> int:
@@ -32,13 +33,29 @@ def parse_message_id(value: str) -> int:
     return result
 
 
+def normalize_message_kind(value: str | None) -> str | None:
+    # 兼容旧版小程序把“全部”的空值序列化为 kind=。
+    if value in {None, ""}:
+        return None
+    if value not in MESSAGE_KINDS:
+        raise ApiError(400, "INVALID_ARGUMENT", "kind 必须是 notification 或 announcement", field="kind")
+    return value
+
+
 @router.get("/messages")
 async def messages(
     request: Request, user: UserDep, session: SessionDep,
-    kind: str | None = Query(default=None, pattern="^(notification|announcement)$"),
+    kind: str | None = Query(default=None),
     unread_only: bool = False, page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=100),
 ):
-    items, total = await list_user_messages(session, user, kind=kind, unread_only=unread_only, page=page, page_size=page_size)
+    items, total = await list_user_messages(
+        session,
+        user,
+        kind=normalize_message_kind(kind),
+        unread_only=unread_only,
+        page=page,
+        page_size=page_size,
+    )
     return response(request, {"items": items, "page": page, "page_size": page_size, "total": total})
 
 
@@ -63,8 +80,9 @@ async def read_message(messageId: str, request: Request, user: UserDep, session:
 @router.post("/messages/read-all")
 async def read_all_messages(
     request: Request, user: UserDep, session: SessionDep,
-    kind: str | None = Query(default=None, pattern="^(notification|announcement)$"),
+    kind: str | None = Query(default=None),
 ):
+    kind = normalize_message_kind(kind)
     query = select(PlatformMessage.id).where(effective_message_filter(user))
     if kind:
         query = query.where(PlatformMessage.kind == kind)

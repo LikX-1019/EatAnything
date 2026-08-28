@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const props = withDefaults(defineProps<{ title?: string; compact?: boolean; back?: boolean; dark?: boolean; weather?: boolean }>(), { title: '', compact: false, back: false, dark: false, weather: false })
+const props = withDefaults(defineProps<{ title?: string; compact?: boolean; back?: boolean; dark?: boolean; weather?: boolean; backTabFallback?: string }>(), { title: '', compact: false, back: false, dark: false, weather: false, backTabFallback: '' })
 const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 24
 let navBarHeight = 44
 
@@ -13,7 +13,22 @@ try {
 }
 
 const headerHeight = statusBarHeight + navBarHeight
-function goBack() { uni.navigateBack() }
+function goBack() {
+  uni.navigateBack({
+    fail: () => {
+      if (!props.backTabFallback) return
+      uni.switchTab({
+        url: props.backTabFallback,
+        fail: () => {
+          uni.reLaunch({
+            url: props.backTabFallback,
+            fail: () => uni.showToast({ title: '返回失败，请稍后重试', icon: 'none' }),
+          })
+        },
+      })
+    },
+  })
+}
 </script>
 
 <template>

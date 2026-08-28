@@ -4,8 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
+from sqlalchemy.dialects import postgresql
 
 from app.core.errors import ApiError
+from app.models import UserFavorite
 from app.repositories.states import set_favorite
 from app.services import checkins as checkins_service
 from app.services.checkins import create_check_in, validate_check_in_image
@@ -21,22 +23,17 @@ def image_bytes(image_format: str = "PNG") -> bytes:
 class FavoriteSession:
     def __init__(self) -> None:
         self.favorite = None
-        self.added = []
-        self.deleted = []
+        self.executed = []
 
     async def get(self, _model, _key):
         return self.favorite
 
-    def add(self, value):
-        self.added.append(value)
-        self.favorite = value
-
-    async def flush(self):
-        return None
-
-    async def delete(self, value):
-        self.deleted.append(value)
-        self.favorite = None
+    async def execute(self, statement):
+        self.executed.append(statement)
+        if statement.is_insert and self.favorite is None:
+            self.favorite = UserFavorite(user_id=1, store_id=2)
+        elif statement.is_delete:
+            self.favorite = None
 
 
 @pytest.mark.asyncio
@@ -47,7 +44,9 @@ async def test_duplicate_favorite_add_is_idempotent() -> None:
     second = await set_favorite(session, user_id=1, store_id=2, enabled=True)
 
     assert first is second
-    assert len(session.added) == 1
+    assert len(session.executed) == 2
+    sql = str(session.executed[0].compile(dialect=postgresql.dialect()))
+    assert "ON CONFLICT (user_id, store_id) DO NOTHING" in sql
 
 
 @pytest.mark.asyncio
@@ -60,7 +59,7 @@ async def test_favorite_can_be_added_and_removed() -> None:
     assert added is not None
     assert removed is None
     assert session.favorite is None
-    assert session.deleted == [added]
+    assert session.executed[-1].is_delete
 
 
 class CheckInSession:

@@ -5,6 +5,7 @@ import pytest
 
 from app.core.errors import ApiError
 from app.models import PlatformMessage
+from app.api.v1.messages import normalize_message_kind
 from app.services.messages import create_system_message, message_state, sanitize_message_html, validate_action
 from app.workers import notifications as notification_worker
 
@@ -54,6 +55,19 @@ def test_controlled_action_requires_store_id_only_for_detail() -> None:
         validate_action("store_detail", None)
     with pytest.raises(ApiError):
         validate_action("https://example.com", None)
+
+
+def test_empty_message_kind_means_all_messages() -> None:
+    assert normalize_message_kind(None) is None
+    assert normalize_message_kind("") is None
+    assert normalize_message_kind("notification") == "notification"
+
+
+def test_invalid_message_kind_is_rejected() -> None:
+    with pytest.raises(ApiError) as error:
+        normalize_message_kind("all")
+    assert error.value.code == "INVALID_ARGUMENT"
+    assert error.value.field == "kind"
 
 
 @pytest.mark.asyncio

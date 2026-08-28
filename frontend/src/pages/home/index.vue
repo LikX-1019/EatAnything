@@ -17,6 +17,7 @@ const appStore = useAppStore()
 const userStore = useUserStore()
 const messageStore = useMessageStore()
 const isDrawing = ref(false)
+const isConfirmingPick = ref(false)
 const isCheckingIn = ref(false)
 const loading = ref(true)
 const loadError = ref('')
@@ -61,7 +62,7 @@ function chooseSchool() { uni.navigateTo({ url: '/pages/schools/index' }) }
 function openAnnouncement(id:string){uni.navigateTo({url:`/pages/messages/detail?id=${id}`})}
 function chooseArea(id: string) { appStore.selectArea(id) }
 async function drawStore() {
-  if (isDrawing.value || appStore.isPickLocked) return
+  if (isDrawing.value || isConfirmingPick.value || appStore.isPickLocked) return
   if (!userStore.profile?.schoolId) return uni.showToast({ title: '请先选择学校', icon: 'none' })
   const pool = appStore.activeSchoolStores
   if (!pool.length) return uni.showToast({ title: '当前学校暂无店铺', icon: 'none' })
@@ -87,6 +88,7 @@ async function drawStore() {
 }
 function replaceCurrentPick() { void drawStore() }
 async function togglePickLock() {
+  if (isConfirmingPick.value) return
   if (appStore.isPickLocked) {
     if (appStore.unlockCurrentPick()) {
       uni.showToast({ title: '已取消锁定，可以重新抽取', icon: 'none' })
@@ -96,11 +98,14 @@ async function togglePickLock() {
     return
   }
   if (!appStore.currentPick) return
+  isConfirmingPick.value = true
   try {
     await appStore.confirmStoreChoice(appStore.currentPick.id)
     if (appStore.lockCurrentPick()) uni.showToast({ title: '已锁定这家店', icon: 'none' })
   } catch (error) {
     showError(error, '记录选择失败')
+  } finally {
+    isConfirmingPick.value = false
   }
 }
 async function toggleFavorite() {
@@ -253,12 +258,12 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
             </view>
           </view>
         </view>
-        <button class="pull-tab" :disabled="isDrawing || appStore.isPickLocked" hover-class="button-active" @tap="appStore.currentPick ? replaceCurrentPick() : drawStore()"><text class="tab-heart">♡</text><text>{{ isDrawing ? '抽签中' : appStore.currentPick ? '再抽一次' : 'PULL' }}</text></button>
+        <button class="pull-tab" :disabled="isDrawing || isConfirmingPick || appStore.isPickLocked" hover-class="button-active" @tap="appStore.currentPick ? replaceCurrentPick() : drawStore()"><text class="tab-heart">♡</text><text>{{ isDrawing ? '抽签中' : appStore.currentPick ? '再抽一次' : 'PULL' }}</text></button>
         <view class="string" />
       </view>
       <view v-if="appStore.currentPick && !isDrawing" class="result-actions">
         <button class="favorite-button" @tap="toggleFavorite">{{ appStore.currentPick.isFavorite ? '♥ 已收藏' : '♡ 收藏' }}</button>
-        <button class="lock-button" :class="{ locked: appStore.isPickLocked }" @tap="togglePickLock">{{ appStore.isPickLocked ? '↶ 取消锁定' : '✓ 就吃这家！' }}</button>
+        <button class="lock-button" :class="{ locked: appStore.isPickLocked }" :disabled="isConfirmingPick" @tap="togglePickLock">{{ isConfirmingPick ? '记录中…' : appStore.isPickLocked ? '↶ 取消锁定' : '✓ 就吃这家！' }}</button>
       </view>
       <view v-if="appStore.isPickLocked" class="check-in-row"><text>{{ currentPickCheckIn ? '还可以继续记录这家店的到店照片' : '这顿就这么定啦，到了记得打卡～' }}</text><button :disabled="isCheckingIn" @tap="checkIn">{{ isCheckingIn ? '上传中' : currentPickCheckIn ? '添加打卡' : '到店打卡' }}</button></view>
       <view class="section-heading"><text>探索校园店铺</text><text>{{ appStore.activeArea?.name }} · {{ appStore.activeAreaStores.length }} 家可抽</text></view>

@@ -139,7 +139,7 @@ onShow(()=>{
 
 <template>
   <view class="page-shell settings-page" :class="appStore.fontClass">
-    <PageHeader title="设置" back />
+    <PageHeader title="设置" back back-tab-fallback="/pages/profile/index" />
     <view class="page-pad">
       <view class="section-label profile-label"><text>✎ 个人资料</text><text>微信端可一键填充头像昵称</text></view>
       <view class="profile-sheet">

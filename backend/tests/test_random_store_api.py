@@ -89,3 +89,39 @@ async def test_random_store_rejects_admin_token() -> None:
         )
 
     assert error.value.code == "FORBIDDEN"
+
+
+async def test_record_visit_writes_confirmed_pick(monkeypatch) -> None:
+    captured = {}
+
+    async def load_store(_session, store_id, *, active_only):
+        captured.update(store_id=store_id, active_only=active_only)
+        return SimpleNamespace(id=store_id)
+
+    async def write_history(_session, *, user_id, store_id, action):
+        captured.update(user_id=user_id, history_store_id=store_id, action=action)
+        return SimpleNamespace(id=11)
+
+    class Session:
+        async def commit(self) -> None:
+            captured["committed"] = True
+
+    monkeypatch.setattr(stores_api, "get_store", load_store)
+    monkeypatch.setattr(stores_api, "add_history", write_history)
+
+    result = await stores_api.record_visit(
+        "2",
+        request(),
+        SimpleNamespace(id=7),
+        Session(),
+    )
+
+    assert captured == {
+        "store_id": 2,
+        "active_only": True,
+        "user_id": 7,
+        "history_store_id": 2,
+        "action": "confirmed_pick",
+        "committed": True,
+    }
+    assert result["data"] == {"id": "11", "action": "CONFIRMED_PICK", "store_id": "2"}

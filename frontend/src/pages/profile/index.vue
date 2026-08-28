@@ -17,6 +17,7 @@ const userStore = useUserStore()
 const messageStore = useMessageStore()
 const loading = ref(true)
 const errorMessage = ref('')
+const isOpeningSettings = ref(false)
 const menuItems = [
   { key: 'messages', icon: '✉', label: '消息中心', path: '/pages/messages/index', color: '#e8755f' },
   { key: 'favorites', icon: '☆', label: '我的收藏', path: '/pages/favorites/index', color: '#f0a028' },
@@ -28,6 +29,10 @@ const menuItems = [
 ]
 
 function handleMenu(item: typeof menuItems[number]) {
+  if (item.key === 'settings') {
+    openSettings()
+    return
+  }
   if (item.path) {
     uni.navigateTo({ url: item.path })
     return
@@ -40,9 +45,27 @@ function handleMenu(item: typeof menuItems[number]) {
   })
 }
 
-function editProfile() {
-  uni.navigateTo({ url: '/pages/settings/index' })
+function openSettings() {
+  if (isOpeningSettings.value) return
+  isOpeningSettings.value = true
+  const url = '/pages/settings/index'
+  uni.navigateTo({
+    url,
+    success: () => { isOpeningSettings.value = false },
+    fail: () => {
+      uni.redirectTo({
+        url,
+        success: () => { isOpeningSettings.value = false },
+        fail: () => {
+          isOpeningSettings.value = false
+          uni.showToast({ title: '设置页打开失败，请稍后重试', icon: 'none' })
+        },
+      })
+    },
+  })
 }
+
+function editProfile() { openSettings() }
 
 onShareAppMessage(() => ({ title: '校园吃什么？让它帮你选一家', path: '/pages/home/index' }))
 async function loadProfile(refresh = false) {
@@ -52,7 +75,8 @@ async function loadProfile(refresh = false) {
     const shouldRefresh = userStore.initialized
     await userStore.initialize()
     if (shouldRefresh) await userStore.refreshProfile()
-    await messageStore.refreshUnread()
+    // 未读数是辅助信息，失败或响应较慢都不应阻塞个人资料与设置入口。
+    void messageStore.refreshUnread().catch(() => undefined)
   } catch (error) {
     errorMessage.value = error instanceof ApiClientError ? error.message : '用户资料加载失败，请重试'
     uni.showToast({ title: error instanceof ApiClientError ? error.message : '用户资料加载失败', icon: 'none' })
