@@ -32,6 +32,10 @@ tags:
     description: 店铺管理、状态维护和批量导入
   - name: Admin Uploads
     description: 管理端店铺图片上传
+  - name: Messages
+    description: 用户站内通知、公告、已读状态与微信授权
+  - name: Admin Messages
+    description: 管理端通知公告编辑、发布、撤回和图片上传
   - name: Health
     description: 应用存活和依赖就绪检查
 security:
@@ -799,6 +803,121 @@ paths:
           $ref: '#/components/responses/UnsupportedMediaType'
         '500':
           $ref: '#/components/responses/InternalError'
+
+  /me/messages:
+    get:
+      tags: [Messages]
+      summary: 分页查询当前用户有效消息
+      parameters:
+        - { name: kind, in: query, schema: { type: string, enum: [notification, announcement] } }
+        - { name: unread_only, in: query, schema: { type: boolean, default: false } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: 消息分页 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /me/messages/unread-count:
+    get:
+      tags: [Messages]
+      summary: 查询当前有效消息未读数
+      responses:
+        '200': { description: 未读数量 }
+  /me/messages/{messageId}:
+    get:
+      tags: [Messages]
+      summary: 查询消息详情
+      parameters:
+        - { name: messageId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 消息详情 }
+        '404': { description: 消息不存在、无权访问或已失效 }
+  /me/messages/{messageId}/read:
+    post:
+      tags: [Messages]
+      summary: 将单条消息标记为已读
+      parameters:
+        - { name: messageId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 已读状态已更新 }
+  /me/messages/read-all:
+    post:
+      tags: [Messages]
+      summary: 将当前有效消息全部标记为已读
+      responses:
+        '200': { description: 返回受影响数量 }
+  /me/announcements/home:
+    get:
+      tags: [Messages]
+      summary: 查询首页前三条有效公告
+      responses:
+        '200': { description: 重要公告优先的公告列表 }
+  /me/notification-settings:
+    get:
+      tags: [Messages]
+      summary: 查询微信订阅模板和授权状态
+      responses:
+        '200': { description: 通知设置 }
+    patch:
+      tags: [Messages]
+      summary: 启用或停用微信提醒
+      responses:
+        '200': { description: 设置已更新 }
+  /me/notification-settings/wechat-consent:
+    post:
+      tags: [Messages]
+      summary: 保存微信通知和公告模板授权结果
+      responses:
+        '200': { description: 最新授权状态 }
+  /admin/messages:
+    get:
+      tags: [Admin Messages]
+      summary: 按管理员学校范围分页查询通知公告
+      responses:
+        '200': { description: 管理端消息分页 }
+    post:
+      tags: [Admin Messages]
+      summary: 新建通知或公告草稿
+      responses:
+        '201': { description: 草稿及预计接收人数 }
+        '403': { description: 目标超出管理员权限范围 }
+  /admin/messages/{messageId}:
+    get:
+      tags: [Admin Messages]
+      summary: 查询消息、预计接收人数与微信发送统计
+      parameters:
+        - { name: messageId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: 管理端消息详情 }
+    patch:
+      tags: [Admin Messages]
+      summary: 编辑草稿或尚未生效的定时消息
+      parameters:
+        - { name: messageId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: 消息已更新 }
+        '409': { description: 消息已生效，不能编辑 }
+  /admin/messages/{messageId}/publish:
+    post:
+      tags: [Admin Messages]
+      summary: 立即或按草稿时间发布消息
+      parameters:
+        - { name: messageId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: 发布状态和预计接收人数 }
+  /admin/messages/{messageId}/revoke:
+    post:
+      tags: [Admin Messages]
+      summary: 撤回已发布消息
+      parameters:
+        - { name: messageId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: 消息已撤回 }
+  /admin/messages/images:
+    post:
+      tags: [Admin Messages]
+      summary: 上传消息正文图片
+      responses:
+        '201': { description: 返回 mediaId 和平台公开 URL }
 
 components:
   securitySchemes:

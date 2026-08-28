@@ -13,6 +13,7 @@ from app.integrations.minio import MinioStorage
 from app.models import CheckIn, MediaObject
 from app.repositories.stores import get_store
 from app.services.moderation import ensure_user_can_upload_image
+from app.services.messages import create_system_message
 
 
 ALLOWED_IMAGE_TYPES = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
@@ -103,6 +104,10 @@ async def create_check_in(
         )
         session.add(check_in)
         media.upload_state = "attached"
+        await create_system_message(
+            session, user_id=user_id, event_type="checkin.created", title="打卡成功",
+            body=f"你在“{getattr(store, 'name', '所选店铺')}”的打卡已保存。", action_type="checkins",
+        )
         await session.commit()
         await session.refresh(check_in)
         check_in.photo = media
@@ -157,6 +162,10 @@ async def update_check_in(
             media.checksum_sha256 = hashlib.sha256(content).hexdigest()
 
         check_in.note = note.strip() if note and note.strip() else None
+        await create_system_message(
+            session, user_id=user_id, event_type="checkin.updated", title="打卡更新成功",
+            body=f"你在“{check_in.store.name}”的打卡已更新。", action_type="checkins",
+        )
         await session.commit()
         await session.refresh(check_in)
         if new_object_key and old_object_key != new_object_key:

@@ -1,6 +1,6 @@
 # 今天吃什么（EatAnything）
 
-面向校园餐饮场景的微信小程序与管理平台。用户可以按学校浏览店铺、随机选店、收藏、打卡和评价；平台管理员可管理全部学校，学校管理员只能处理被授权学校内的店铺、用户与内容。
+面向校园餐饮场景的微信小程序与管理平台。用户可以按学校浏览店铺、随机选店、收藏、打卡和评价，并在消息中心接收平台通知、公告与微信订阅提醒；平台管理员可管理全部学校，学校管理员只能处理被授权学校内的店铺、用户与内容。
 
 ## 项目组成
 
@@ -9,7 +9,7 @@
 | `frontend/` | uni-app、Vue 3、Pinia | 微信小程序与 H5 用户端 |
 | `admin-web/` | Vue 3、Vite、TypeScript、Element Plus | 独立桌面 Web 管理后台 |
 | `backend/` | FastAPI、SQLAlchemy、Alembic | API、鉴权、学校数据隔离与内容治理 |
-| `deploy/` | Docker Compose、Caddy | PostgreSQL、MinIO、API、管理后台与 HTTPS 编排 |
+| `deploy/` | Docker Compose、Caddy | PostgreSQL、MinIO、API、通知 Worker、管理后台与 HTTPS 编排 |
 | `docs/` | Markdown、OpenAPI | 配置、使用、发布和接口说明 |
 
 生产数据保存在 PostgreSQL 与 MinIO 命名卷中。用户打卡照片等媒体进入私有 bucket，只能通过鉴权接口读取；店铺公开图片位于只读公开 bucket。

@@ -19,6 +19,7 @@ dependencies = [
   "Pillow>=10,<13",
   "orjson>=3.10,<4",
   "structlog>=24,<26",
+  "nh3>=0.2,<1",
 ]
 
 [project.optional-dependencies]

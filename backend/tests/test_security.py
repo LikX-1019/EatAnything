@@ -69,3 +69,23 @@ def test_production_configuration_rejects_local_media_url() -> None:
 def test_production_configuration_requires_metrics_token() -> None:
     with pytest.raises(ValueError, match="METRICS_TOKEN"):
         production_settings(METRICS_ENABLED=True, METRICS_TOKEN=None)
+
+
+def test_wechat_subscription_configuration_fails_closed() -> None:
+    with pytest.raises(ValueError, match="WECHAT_NOTIFICATION_TEMPLATE_ID"):
+        production_settings(WECHAT_SUBSCRIBE_ENABLED=True)
+
+
+def test_wechat_subscription_configuration_accepts_two_templates() -> None:
+    settings = production_settings(
+        WECHAT_SUBSCRIBE_ENABLED=True,
+        WECHAT_NOTIFICATION_TEMPLATE_ID="notice-template",
+        WECHAT_NOTIFICATION_TITLE_KEY="thing1",
+        WECHAT_NOTIFICATION_CONTENT_KEY="thing2",
+        WECHAT_NOTIFICATION_TIME_KEY="time3",
+        WECHAT_ANNOUNCEMENT_TEMPLATE_ID="announcement-template",
+        WECHAT_ANNOUNCEMENT_TITLE_KEY="thing1",
+        WECHAT_ANNOUNCEMENT_CONTENT_KEY="thing2",
+        WECHAT_ANNOUNCEMENT_TIME_KEY="time3",
+    )
+    assert settings.wechat_template("notification") == ("notice-template", "thing1", "thing2", "time3")

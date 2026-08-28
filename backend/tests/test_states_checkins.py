@@ -123,7 +123,7 @@ async def test_check_in_creation_persists_the_eaten_state(monkeypatch) -> None:
 
 
 async def _existing_store():
-    return SimpleNamespace(school_id=1)
+    return SimpleNamespace(school_id=1, name="测试店铺")
 
 
 def test_check_in_requires_a_valid_image() -> None:

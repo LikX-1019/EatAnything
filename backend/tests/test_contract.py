@@ -28,6 +28,14 @@ def test_required_paths_are_exposed() -> None:
         "/api/v1/admin/stores/import",
         "/api/v1/admin/stores/{storeId}",
         "/api/v1/admin/uploads/images",
+        "/api/v1/me/messages",
+        "/api/v1/me/messages/unread-count",
+        "/api/v1/me/messages/{messageId}",
+        "/api/v1/me/announcements/home",
+        "/api/v1/me/notification-settings",
+        "/api/v1/admin/messages",
+        "/api/v1/admin/messages/{messageId}",
+        "/api/v1/admin/messages/images",
     }
     assert required <= set(paths)
 

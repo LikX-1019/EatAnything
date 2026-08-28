@@ -6,6 +6,9 @@ from app.models.entities import (
     AppUser,
     CheckIn,
     MediaObject,
+    MessageMediaLink,
+    MessageReadState,
+    PlatformMessage,
     Review,
     School,
     SchoolArea,
@@ -14,6 +17,8 @@ from app.models.entities import (
     StoreImage,
     UserFavorite,
     UserRestriction,
+    UserWechatSubscription,
+    WechatDeliveryJob,
 )
 
 __all__ = [
@@ -24,6 +29,9 @@ __all__ = [
     "AppUser",
     "CheckIn",
     "MediaObject",
+    "MessageMediaLink",
+    "MessageReadState",
+    "PlatformMessage",
     "Review",
     "School",
     "SchoolArea",
@@ -32,4 +40,6 @@ __all__ = [
     "StoreImage",
     "UserFavorite",
     "UserRestriction",
+    "UserWechatSubscription",
+    "WechatDeliveryJob",
 ]

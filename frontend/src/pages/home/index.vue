@@ -9,11 +9,13 @@ import StickerTabBar from '../../components/StickerTabBar.vue'
 // #endif
 import { useAppStore } from '../../stores/useAppStore'
 import { useUserStore } from '../../stores/useUserStore'
+import { useMessageStore } from '../../stores/useMessageStore'
 import { storeImageUrl, storeScoreLabel } from '../../utils/store'
 import { syncTabBarSelected } from '../../utils/tabbar'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
+const messageStore = useMessageStore()
 const isDrawing = ref(false)
 const isCheckingIn = ref(false)
 const loading = ref(true)
@@ -34,6 +36,7 @@ async function loadHome(refresh = false) {
   try {
     if (refresh) await appStore.refresh()
     else await appStore.initialize()
+    await messageStore.refreshAnnouncements()
   } catch (error) {
     loadError.value = error instanceof ApiClientError ? error.message : '首页加载失败，请重试'
     showError(error, '核心数据加载失败')
@@ -49,6 +52,7 @@ onShow(() => {
 onPullDownRefresh(() => { void loadHome(true) })
 
 function chooseSchool() { uni.navigateTo({ url: '/pages/schools/index' }) }
+function openAnnouncement(id:string){uni.navigateTo({url:`/pages/messages/detail?id=${id}`})}
 function chooseArea(id: string) { appStore.selectArea(id) }
 async function drawStore() {
   if (isDrawing.value || appStore.isPickLocked) return
@@ -202,6 +206,9 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
         </scroll-view>
         <text class="random-scope-note">区域用于浏览筛选；随机结果由后端店铺池生成</text>
       </view>
+      <swiper v-if="messageStore.announcements.length" class="announcement-swiper" circular autoplay :interval="5000" indicator-dots>
+        <swiper-item v-for="notice in messageStore.announcements" :key="notice.id"><view class="announcement-card" :class="{important:notice.priority==='important'}" @tap="openAnnouncement(notice.id)"><text class="announcement-tag">📣 平台公告</text><text class="announcement-title">{{notice.title}}</text><text class="announcement-more">查看详情 ›</text></view></swiper-item>
+      </swiper>
       <view class="lucky-stage" :class="{ 'has-result': appStore.currentPick && !isDrawing }">
         <text class="corner-flower">✿</text><text class="corner-star">✦</text>
         <view class="lucky-frame">
@@ -250,6 +257,7 @@ onUnmounted(() => { if (shuffleTimer) clearInterval(shuffleTimer); if (finishTim
 .home-content { position: relative; padding: 18rpx 30rpx 24rpx; overflow: hidden; }
 .page-state { display: flex; align-items: center; justify-content: center; min-height: 520rpx; padding: 40rpx; color: var(--muted); font-size: 28rpx; flex-direction: column; text-align: center; }.retry-button { margin-top: 22rpx; padding: 0 26rpx; height: 70rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 26rpx; }
 .scope-card { margin-top: 12rpx; padding: 14rpx 16rpx; border: 1rpx dashed #d5b990; border-radius: 12rpx; background: rgba(255,250,236,.62); }.school-button { display: inline-flex; align-items: center; height: 48rpx; padding: 0; color: var(--brand-deep); font-size: 27rpx; font-weight: 800; }.chevron { margin-left: 4rpx; }.area-tabs { width: 100%; margin-top: 10rpx; white-space: nowrap; }.area-tab { display: inline-flex; align-items: center; height: 56rpx; margin-right: 10rpx; padding: 0 22rpx; border: 1rpx solid #dfc8a5; border-radius: 7rpx 12rpx 8rpx 11rpx; background: #fffaf0; color: #806b56; font-size: 25rpx; }.area-tab.active { border-color: #e38b78; background: #f8d8ce; color: #a85043; font-weight: 800; box-shadow: 0 3rpx 0 #dca092; }
+.announcement-swiper{height:160rpx;margin-top:18rpx}.announcement-card{position:relative;height:140rpx;padding:20rpx 24rpx;border:1rpx solid #e1c59f;border-radius:9rpx 15rpx 8rpx 12rpx;background:#fff6dc;box-shadow:var(--paper-shadow)}.announcement-card.important{border-left:8rpx solid var(--brand)}.announcement-tag,.announcement-title{display:block}.announcement-tag{color:var(--brand);font-size:22rpx;font-weight:900}.announcement-title{margin-top:10rpx;overflow:hidden;font-size:30rpx;font-weight:900;text-overflow:ellipsis;white-space:nowrap}.announcement-more{position:absolute;right:22rpx;bottom:14rpx;color:var(--muted);font-size:21rpx}
 .random-scope-note { display: block; margin-top: 8rpx; color: var(--muted); font-size: 20rpx; }
 .lucky-stage { position: relative; height: 650rpx; margin: 20rpx 16rpx 0; padding: 25rpx 30rpx 68rpx; border: 3rpx solid rgba(220,145,125,.52); border-radius: 20rpx; background: rgba(244,180,165,.32); box-shadow: inset 0 0 0 12rpx rgba(255,255,255,.23); }.lucky-stage::before { position: absolute; top: 12rpx; right: 16rpx; bottom: 12rpx; left: 16rpx; border: 2rpx dashed rgba(195,115,95,.35); border-radius: 16rpx; content: ''; }.corner-flower, .corner-star { position: absolute; z-index: 3; color: var(--brand); font-size: 35rpx; }.corner-flower { top: 16rpx; left: 18rpx; }.corner-star { top: 20rpx; right: 22rpx; color: var(--amber); }
 .lucky-frame { position: relative; z-index: 2; padding: 16rpx; background: rgba(255,247,226,.75); box-shadow: var(--paper-shadow); transform: rotate(-1deg); }.lucky-paper { position: relative; display: flex; align-items: center; flex-direction: column; justify-content: flex-start; height: 518rpx; padding: 22rpx 20rpx; overflow: hidden; border: 1rpx solid #d8bd99; background: #fffaf0; box-shadow: inset 0 0 22rpx rgba(157,111,66,.06); }.lucky-paper.has-result { padding: 18rpx 20rpx 10rpx; }.lucky-paper::before, .lucky-paper::after { position: absolute; top: -15rpx; width: 86rpx; height: 30rpx; background: rgba(239,200,145,.5); content: ''; }.lucky-paper::before { left: -26rpx; transform: rotate(-25deg); }.lucky-paper::after { right: -24rpx; transform: rotate(24deg); }.sun-mark { flex: 0 0 auto; color: var(--amber); font-size: 32rpx; }.lucky-label { flex: 0 0 auto; margin-top: 3rpx; font-size: 31rpx; font-weight: 900; letter-spacing: 4rpx; }

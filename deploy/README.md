@@ -1,6 +1,6 @@
 # EatAnything 后端部署说明
 
-本文档描述完整服务在服务器上的 Docker Compose 部署方式，覆盖 PostgreSQL、MinIO、API、Web 管理后台、可选 Caddy HTTPS、数据库初始化与日常运维命令。手工命令默认在仓库根目录执行；`deploy/scripts/deploy.sh` 可从任意目录调用。
+本文档描述完整服务在服务器上的 Docker Compose 部署方式，覆盖 PostgreSQL、MinIO、API、通知 Worker、Web 管理后台、可选 Caddy HTTPS、数据库初始化与日常运维命令。手工命令默认在仓库根目录执行；`deploy/scripts/deploy.sh` 可从任意目录调用。
 
 > 本仓库可通过 Caddy 自动申请和续期 HTTPS 证书。DNS、服务器防火墙、ICP备案和微信平台合法域名登记仍需在对应外部平台完成。
 
@@ -45,6 +45,8 @@ openssl rand -hex 24
 ```
 
 `WECHAT_APP_ID` 与 `WECHAT_APP_SECRET` 填写微信小程序后台的真实值。
+
+需要微信订阅消息时设置 `WECHAT_SUBSCRIBE_ENABLED=true`，并分别填写通知、公告模板的 ID 与标题、内容、时间字段 key。模板字段必须与微信公众平台选定模板一致；未启用时这些字段保持空值，站内消息仍正常工作。
 
 注意事项：
 
@@ -367,6 +369,7 @@ npm run verify:production
 | `postgres` | `postgres:16-alpine` | PostgreSQL 数据库，执行 baseline 初始化 |
 | `db-init` | 与 `api` 同镜像 | 一次性：数据库版本 stamp/upgrade |
 | `minio` | `minio/minio` | 对象存储服务 |
+| `notification-worker` | 与 `api` 相同 | 展开 PostgreSQL 发送队列、发送微信订阅消息并重试 |
 | `minio-init` | `minio/mc` | 一次性：幂等创建存储桶 |
 | `api` | 本项目构建 | FastAPI（uvicorn `app.main:app`） |
 | `admin-web` | 本项目构建 | 独立 Vue 3 管理站及 `/api/` 反向代理 |

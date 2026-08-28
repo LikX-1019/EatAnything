@@ -352,7 +352,7 @@ main() {
     if [[ "${NO_CACHE}" == "1" ]]; then
         build_args+=(--no-cache)
     fi
-    log "构建 api 与 admin-web 镜像（db-init 与 api 共用 API 镜像）..."
+    log "构建 api 与 admin-web 镜像（db-init、api 与 notification-worker 共用 API 镜像）..."
     "${COMPOSE[@]}" "${build_args[@]}" api admin-web
 
     if [[ "$(read_env_value APP_ENV || true)" == "production" || "$(read_env_value APP_ENV || true)" == "prod" ]]; then
@@ -383,6 +383,11 @@ main() {
 
     CURRENT_STEP="等待 API 健康状态"
     wait_for_healthy api
+
+    CURRENT_STEP="启动或更新通知 Worker"
+    log "API 已健康，开始启动或更新 notification-worker..."
+    "${COMPOSE[@]}" up -d --no-deps notification-worker
+    wait_for_running notification-worker
 
     CURRENT_STEP="启动或更新 Web 管理后台"
     log "API 已健康，开始启动或更新 admin-web..."
@@ -424,6 +429,7 @@ main() {
     printf 'minio-init: passed\n'
     printf 'db-init: passed\n'
     printf 'api: healthy\n\n'
+    printf 'notification-worker: running\n\n'
     printf 'admin-web: healthy\n\n'
     if [[ "${ENABLE_CADDY_VALUE}" == "1" ]]; then
         printf 'caddy: healthy\n\n'

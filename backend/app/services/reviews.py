@@ -14,6 +14,7 @@ from app.repositories.states import latest_check_in
 from app.repositories.stores import get_store
 from app.services.stores import categories_text, primary_image_url
 from app.services.moderation import ensure_user_can_comment
+from app.services.messages import create_system_message
 
 
 def reviewer_view(review: Review, storage: MinioStorage) -> dict:
@@ -69,6 +70,7 @@ async def upsert_review(session: AsyncSession, storage: MinioStorage, user_id: i
         if check_in is None:
             raise ApiError(403, "REVIEW_REQUIRES_CHECK_IN", "发表评价前必须先完成带图片打卡")
         existing.check_in_id = check_in.id
+    created = existing is None
     if existing is None:
         existing = Review(user_id=user_id, store_id=store_id, check_in_id=check_in.id, rating=rating, content=content.strip(), status="published")
         session.add(existing)
@@ -78,6 +80,14 @@ async def upsert_review(session: AsyncSession, storage: MinioStorage, user_id: i
         # 管理员隐藏的评价不能通过用户编辑自行恢复。
         if existing.status != "hidden":
             existing.status = "published"
+    await create_system_message(
+        session,
+        user_id=user_id,
+        event_type="review.created" if created else "review.updated",
+        title="评价发布成功" if created else "评价更新成功",
+        body=f"你对“{store.name}”的评价已{'发布' if created else '更新'}。",
+        action_type="reviews",
+    )
     await session.commit()
     await session.refresh(existing)
     return my_review_view(existing, storage)

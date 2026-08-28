@@ -12,6 +12,7 @@ const routes = [
       { path: 'users', component: () => import('../views/UsersView.vue'), meta: { title: '用户管理', note: '每位同学都有自己的档案卡' } },
       { path: 'reviews', component: () => import('../views/ReviewsView.vue'), meta: { title: '评论管理', note: '认真收好每一条评价' } },
       { path: 'check-ins', component: () => import('../views/CheckInsView.vue'), meta: { title: '打卡照片', note: '校园里的每一餐留影' } },
+      { path: 'messages', component: () => import('../views/MessagesView.vue'), meta: { title: '通知公告', note: '把重要消息认真送到每位同学手中' } },
       { path: 'admins', component: () => import('../views/AdminsView.vue'), meta: { title: '管理员管理', note: '一起维护这本校园手账', platformOnly: true } },
       { path: 'audit-logs', component: () => import('../views/AuditLogsView.vue'), meta: { title: '审计日志', note: '重要操作都有迹可循' } },
     ],

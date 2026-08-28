@@ -7,6 +7,8 @@
     { "path": "pages/checkins/history", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
     { "path": "pages/profile/index", "style": { "navigationStyle": "custom", "enableShareAppMessage": true, "enablePullDownRefresh": true } },
     { "path": "pages/settings/index", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/messages/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
+    { "path": "pages/messages/detail", "style": { "navigationStyle": "custom" } },
     { "path": "pages/schools/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
     { "path": "pages/favorites/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
     { "path": "pages/reviews/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },

@@ -24,6 +24,7 @@
 | 用户管理 | `/admin/users` | 用户档案、账号状态、评论和图片上传限制 |
 | 评论管理 | `/admin/reviews` | 评论查询、批量隐藏和恢复 |
 | 打卡照片 | `/admin/check-ins` | 私有照片鉴权预览、批量隐藏和恢复 |
+| 通知公告 | `/admin/messages` | 富文本编辑、目标选择、定时发布、微信同步和撤回 |
 | 管理员管理 | `/admin/admins` | 角色、学校范围、状态和密码维护 |
 | 审计日志 | `/admin/audit-logs` | 操作记录查询和当前页 CSV 导出 |
 
@@ -51,9 +52,18 @@ GET    /api/v1/admin/admin-users
 POST   /api/v1/admin/admin-users
 PATCH  /api/v1/admin/admin-users/{adminId}
 GET    /api/v1/admin/audit-logs
+GET    /api/v1/admin/messages
+POST   /api/v1/admin/messages
+GET    /api/v1/admin/messages/{messageId}
+PATCH  /api/v1/admin/messages/{messageId}
+POST   /api/v1/admin/messages/{messageId}/publish
+POST   /api/v1/admin/messages/{messageId}/revoke
+POST   /api/v1/admin/messages/images
 ```
 
 批量用户和内容治理每次最多处理 100 条。限制或内容状态操作必须提供非空原因。
+
+通知和公告可面向全平台、单个学校或单个用户。只有平台管理员可选择全平台；学校管理员只能选择授权学校及其中用户。正文图片必须从消息编辑器上传，外部图片、脚本和任意链接会被服务端清理。已生效消息不可编辑，只能撤回后重新创建。
 
 批量导入先提交 `schoolId` 选择目标学校，模板只包含 `食堂`、`店铺位置`、`店铺名称`、`店铺图片` 四列；店铺编码、分类和上架状态由系统生成或设置。
 
@@ -79,3 +89,5 @@ GET    /api/v1/admin/audit-logs
 ## 6. 数据库迁移
 
 `0006_admin_governance` 新增管理员学校绑定、用户限制和审计日志表，并为评论与打卡增加治理字段。已有打卡的 `school_id` 根据关联店铺回填后设为非空。
+
+`0008_platform_messages` 新增统一消息、媒体关联、已读状态、微信授权和发送队列表。全新数据库仍以 `0006_admin_governance` 作为 baseline，再依次执行后续迁移。

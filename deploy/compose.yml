@@ -15,6 +15,15 @@ x-api-env: &api_env
   DEV_AUTH_ENABLED: ${DEV_AUTH_ENABLED:-false}
   WECHAT_APP_ID: ${WECHAT_APP_ID:-}
   WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
+  WECHAT_SUBSCRIBE_ENABLED: ${WECHAT_SUBSCRIBE_ENABLED:-false}
+  WECHAT_NOTIFICATION_TEMPLATE_ID: ${WECHAT_NOTIFICATION_TEMPLATE_ID:-}
+  WECHAT_NOTIFICATION_TITLE_KEY: ${WECHAT_NOTIFICATION_TITLE_KEY:-}
+  WECHAT_NOTIFICATION_CONTENT_KEY: ${WECHAT_NOTIFICATION_CONTENT_KEY:-}
+  WECHAT_NOTIFICATION_TIME_KEY: ${WECHAT_NOTIFICATION_TIME_KEY:-}
+  WECHAT_ANNOUNCEMENT_TEMPLATE_ID: ${WECHAT_ANNOUNCEMENT_TEMPLATE_ID:-}
+  WECHAT_ANNOUNCEMENT_TITLE_KEY: ${WECHAT_ANNOUNCEMENT_TITLE_KEY:-}
+  WECHAT_ANNOUNCEMENT_CONTENT_KEY: ${WECHAT_ANNOUNCEMENT_CONTENT_KEY:-}
+  WECHAT_ANNOUNCEMENT_TIME_KEY: ${WECHAT_ANNOUNCEMENT_TIME_KEY:-}
   POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
   POSTGRES_PORT: ${POSTGRES_PORT:-5432}
   POSTGRES_DB: ${POSTGRES_DB}
@@ -165,6 +174,22 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - eatanything
+
+  notification-worker:
+    image: ${API_IMAGE:-eat-anything-api:local}
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    environment: *api_env
+    command: ["python", "-m", "app.workers.notifications"]
     networks:
       - eatanything
 

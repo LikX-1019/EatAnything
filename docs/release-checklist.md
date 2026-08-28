@@ -8,6 +8,7 @@
 - [ ] GitHub Actions 的后端、用户端、管理后台和部署检查全部通过。
 - [ ] `deploy/.env` 权限为 `600`，没有占位值，没有复制本机开发配置。
 - [ ] `APP_ENV=production`、`DEV_AUTH_ENABLED=false`，微信配置和随机 Secret 已填写。
+- [ ] 若启用微信订阅消息，两套模板 ID 与标题、内容、时间字段 key 已核对，未把 AppSecret 写入仓库或日志。
 - [ ] `COMPOSE_PROJECT_NAME`、数据卷和网络名称与目标环境完全一致。
 - [ ] `MINIO_PUBLIC_URL`、`CORS_ORIGINS`、`APP_DOMAIN` 使用正式 HTTPS 域名。
 - [ ] DNS 已解析到目标服务器，防火墙只开放必要端口。
@@ -45,6 +46,8 @@ docker compose -f deploy/compose.yml --env-file deploy/.env run --rm --no-deps d
 - [ ] CSV/XLSX 店铺导入可预校验，错误批次不写入。
 - [ ] 用户档案能查看账号、评论和打卡，限制操作生效。
 - [ ] 评论和打卡照片可隐藏、恢复，审计日志完整。
+- [ ] 通知和公告可按权限创建、定时发布、阅读与撤回，首页公告和消息未读数正常。
+- [ ] `notification-worker` 处于 running；测试账号可完成两套模板授权并收到测试订阅消息，失败任务无持续重试风暴。
 - [ ] 小程序登录、学校切换、店铺、随机、收藏、打卡、评论和图片显示正常。
 - [ ] 微信公众平台的 `request`、`uploadFile`、`downloadFile` 合法域名已登记。
 - [ ] 观察 15 至 30 分钟：无持续 5xx、容器重启、磁盘告警或异常登录。

@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -263,3 +264,72 @@ class AdminAuditLog(Base):
     ip_address: Mapped[str | None] = mapped_column(String(64))
     user_agent: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+
+class PlatformMessage(Base):
+    __tablename__ = "platform_messages"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'admin'"))
+    event_type: Mapped[str | None] = mapped_column(String(80))
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    body_html: Mapped[str] = mapped_column(Text, nullable=False)
+    target_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    school_id: Mapped[int | None] = mapped_column(ForeignKey("schools.id", ondelete="SET NULL"))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("app_users.id", ondelete="CASCADE"))
+    priority: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'normal'"))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'draft'"))
+    action_type: Mapped[str | None] = mapped_column(String(30))
+    action_target_id: Mapped[int | None] = mapped_column(BigInteger)
+    wechat_push: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    publish_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expire_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    dispatch_prepared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+
+class MessageMediaLink(Base):
+    __tablename__ = "message_media_links"
+    message_id: Mapped[int] = mapped_column(ForeignKey("platform_messages.id", ondelete="CASCADE"), primary_key=True)
+    media_id: Mapped[int] = mapped_column(ForeignKey("media_objects.id", ondelete="RESTRICT"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+
+class MessageReadState(Base):
+    __tablename__ = "message_read_states"
+    message_id: Mapped[int] = mapped_column(ForeignKey("platform_messages.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("app_users.id", ondelete="CASCADE"), primary_key=True)
+    read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+
+class UserWechatSubscription(Base):
+    __tablename__ = "user_wechat_subscriptions"
+    user_id: Mapped[int] = mapped_column(ForeignKey("app_users.id", ondelete="CASCADE"), primary_key=True)
+    template_kind: Mapped[str] = mapped_column(String(20), primary_key=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'unknown'"))
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    consented_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+
+class WechatDeliveryJob(Base):
+    __tablename__ = "wechat_delivery_jobs"
+    __table_args__ = (UniqueConstraint("message_id", "user_id", name="uq_wechat_delivery_message_user"),)
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("platform_messages.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    template_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'pending'"))
+    attempts: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("0"))
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    last_error_code: Mapped[str | None] = mapped_column(String(80))
+    last_error_message: Mapped[str | None] = mapped_column(String(500))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))

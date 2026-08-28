@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.core.errors import ApiError
-from app.models import Review
+from app.models import PlatformMessage, Review
 from app.services import reviews as review_service
 
 
@@ -72,7 +72,7 @@ async def test_review_create_uses_latest_check_in(monkeypatch) -> None:
     session = ReviewSession()
     result = await review_service.upsert_review(session, Storage(), 1, 2, 4, "  份量足  ")
 
-    created = session.added[0]
+    created = next(item for item in session.added if isinstance(item, Review))
     assert result["rating"] == 4
     assert result["content"] == "份量足"
     assert created.check_in_id == 7
@@ -95,7 +95,7 @@ async def test_review_update_keeps_one_review(monkeypatch) -> None:
     assert result["id"] == "10"
     assert result["rating"] == 5
     assert result["content"] == "更新后的评价"
-    assert session.added == []
+    assert len([item for item in session.added if isinstance(item, PlatformMessage)]) == 1
 
 
 async def _store():

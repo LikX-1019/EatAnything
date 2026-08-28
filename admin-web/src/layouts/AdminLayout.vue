@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DataAnalysis, School, Shop, UploadFilled, User, ChatDotSquare, Picture, Key, Document } from '@element-plus/icons-vue'
+import { DataAnalysis, School, Shop, UploadFilled, User, ChatDotSquare, Picture, Key, Document, Bell } from '@element-plus/icons-vue'
 import PageHeading from '../components/PageHeading.vue'
 import { useAuthStore } from '../stores/auth'
 import { useWorkspaceStore } from '../stores/workspace'
@@ -14,7 +14,7 @@ const collapsed = ref(false)
 const items = [
   ['/dashboard', '数据总览', DataAnalysis], ['/schools', '学校管理', School], ['/stores', '店铺管理', Shop],
   ['/imports', '批量导入', UploadFilled], ['/users', '用户管理', User], ['/reviews', '评论管理', ChatDotSquare],
-  ['/check-ins', '打卡照片', Picture], ['/admins', '管理员管理', Key], ['/audit-logs', '审计日志', Document],
+  ['/check-ins', '打卡照片', Picture], ['/messages', '通知公告', Bell], ['/admins', '管理员管理', Key], ['/audit-logs', '审计日志', Document],
 ] as const
 const visibleItems = computed(() => items.filter(item => item[0] !== '/admins' || auth.admin?.isPlatformAdmin))
 function logout() { auth.logout(); router.replace('/login') }

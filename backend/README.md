@@ -64,7 +64,7 @@ backend\scripts\server_tunnel.ps1 Stop
 
 ## 生产部署
 
-服务器端使用 Docker Compose 部署 PostgreSQL、MinIO、API、Web 管理后台和可选的 Caddy HTTPS 入口，完整步骤见仓库根目录的 [deploy/README.md](../deploy/README.md)。部署环境变量使用 `deploy/.env`，与本机开发的仓库根目录 `.env` 相互独立。
+服务器端使用 Docker Compose 部署 PostgreSQL、MinIO、API、通知 Worker、Web 管理后台和可选的 Caddy HTTPS 入口，完整步骤见仓库根目录的 [deploy/README.md](../deploy/README.md)。部署环境变量使用 `deploy/.env`，与本机开发的仓库根目录 `.env` 相互独立。
 
 ## 验证
 

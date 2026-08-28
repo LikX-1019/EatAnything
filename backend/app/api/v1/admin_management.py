@@ -28,6 +28,7 @@ from app.models import (
 from app.schemas.common import SchemaBase
 from app.services.admin_scope import admin_school_ids, ensure_school_allowed, is_platform_admin, scoped_school_id
 from app.services.moderation import add_audit_log, restriction_active
+from app.services.messages import create_system_message
 
 
 router = APIRouter(prefix="/admin", tags=["Admin Management"])
@@ -381,6 +382,13 @@ async def update_admin_user(user_id: int, payload: UserUpdate, request: Request,
     before = {"schoolId": user.school_id, "status": user.status}
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(user, key, value)
+    if payload.status is not None and payload.status != before["status"]:
+        await create_system_message(
+            session, user_id=user.id, event_type=f"account.{payload.status}",
+            title="账号已启用" if payload.status == "active" else "账号已禁用",
+            body="你的账号已恢复使用。" if payload.status == "active" else "你的账号已被管理员禁用，如有疑问请联系平台。",
+            action_type="settings", wechat_push=True,
+        )
     add_audit_log(session, request, admin, action="user.update", target_type="user", target_id=user.id, school_id=user.school_id, before=before, after={"schoolId": user.school_id, "status": user.status})
     await session.commit()
     return response(request, {"id": str(user.id)})
@@ -408,6 +416,13 @@ async def update_user_restriction(user_id: int, payload: RestrictionUpdate, requ
     if user.school_id:
         await ensure_school_allowed(session, admin, user.school_id)
     item = await _set_restriction(session, admin, user, payload)
+    label = "评论" if payload.restriction_type == "comment" else "图片上传"
+    await create_system_message(
+        session, user_id=user.id, event_type=f"restriction.{payload.restriction_type}.{'blocked' if payload.blocked else 'unblocked'}",
+        title=f"{label}权限已{'限制' if payload.blocked else '恢复'}",
+        body=f"{label}权限已{'被限制' if payload.blocked else '恢复'}。处理说明：{payload.reason.strip()}",
+        action_type="settings", wechat_push=True,
+    )
     add_audit_log(session, request, admin, action=f"user.restriction.{payload.restriction_type}", target_type="user", target_id=user.id, school_id=user.school_id, reason=payload.reason, after=_restriction_view(item))
     await session.commit()
     return response(request, _restriction_view(item))
@@ -423,6 +438,12 @@ async def batch_user_action(payload: BatchAction, request: Request, admin: Admin
             await ensure_school_allowed(session, admin, user.school_id)
         if payload.action in {"enable", "disable"}:
             user.status = "active" if payload.action == "enable" else "disabled"
+            await create_system_message(
+                session, user_id=user.id, event_type=f"account.{user.status}",
+                title="账号已启用" if user.status == "active" else "账号已禁用",
+                body="你的账号已恢复使用。" if user.status == "active" else f"你的账号已被管理员禁用。处理说明：{payload.reason}",
+                action_type="settings", wechat_push=True,
+            )
         elif payload.action in {"block_comment", "unblock_comment", "block_image", "unblock_image"}:
             is_comment = "comment" in payload.action
             await _set_restriction(
@@ -435,6 +456,15 @@ async def batch_user_action(payload: BatchAction, request: Request, admin: Admin
                     reason=payload.reason,
                     blocked_until=payload.blocked_until,
                 ),
+            )
+            label = "评论" if is_comment else "图片上传"
+            blocked = payload.action.startswith("block_")
+            await create_system_message(
+                session, user_id=user.id,
+                event_type=f"restriction.{'comment' if is_comment else 'image_upload'}.{'blocked' if blocked else 'unblocked'}",
+                title=f"{label}权限已{'限制' if blocked else '恢复'}",
+                body=f"{label}权限已{'被限制' if blocked else '恢复'}。处理说明：{payload.reason}",
+                action_type="settings", wechat_push=True,
             )
         else:
             raise ApiError(400, "INVALID_ARGUMENT", "不支持的批量操作", field="action")
@@ -505,6 +535,12 @@ async def _moderate_reviews(ids: list[int], action: str, reason: str, request: R
         item.moderation_reason = reason if action == "hide" else None
         item.moderated_by = admin.id
         item.moderated_at = datetime.now(UTC)
+        await create_system_message(
+            session, user_id=item.user_id, event_type=f"review.{action}",
+            title="评价已隐藏" if action == "hide" else "评价已恢复",
+            body=f"你在“{item.store.name}”的评价已{'被隐藏' if action == 'hide' else '恢复展示'}。处理说明：{reason}",
+            action_type="reviews", wechat_push=True,
+        )
         add_audit_log(session, request, admin, action=f"review.{action}", target_type="review", target_id=item.id, school_id=item.store.school_id, reason=reason, before=before, after={"status": item.status})
     await session.commit()
     return len(rows)
@@ -600,6 +636,12 @@ async def _moderate_check_ins(ids: list[int], action: str, reason: str, request:
         item.moderation_reason = reason if action == "hide" else None
         item.moderated_by = admin.id
         item.moderated_at = datetime.now(UTC)
+        await create_system_message(
+            session, user_id=item.user_id, event_type=f"checkin.{action}",
+            title="打卡已隐藏" if action == "hide" else "打卡已恢复",
+            body=f"你在“{item.store.name}”的打卡已{'被隐藏' if action == 'hide' else '恢复展示'}。处理说明：{reason}",
+            action_type="checkins", wechat_push=True,
+        )
         add_audit_log(session, request, admin, action=f"check_in.{action}", target_type="check_in", target_id=item.id, school_id=item.school_id, reason=reason, before=before, after={"status": item.status})
     await session.commit()
     return len(rows)

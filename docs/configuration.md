@@ -24,6 +24,9 @@
 | `DEV_AUTH_ENABLED` | 开发登录开关 | 必须为 `false` |
 | `WECHAT_APP_ID` | 微信小程序 AppID | 必填 |
 | `WECHAT_APP_SECRET` | 微信小程序 AppSecret | 必填且只存服务器 |
+| `WECHAT_SUBSCRIBE_ENABLED` | 是否启用微信订阅消息 Worker | 启用时两套模板配置必须完整 |
+| `WECHAT_NOTIFICATION_*` | 通知模板 ID 及标题、内容、时间字段 key | 与微信公众平台模板严格一致 |
+| `WECHAT_ANNOUNCEMENT_*` | 公告模板 ID 及标题、内容、时间字段 key | 与微信公众平台模板严格一致 |
 | `POSTGRES_*` | PostgreSQL 连接信息 | 密码至少 16 字符 |
 | `MINIO_*` | MinIO 连接、bucket 与公网地址 | 公开/私有 bucket 必须不同 |
 | `MAX_UPLOAD_BYTES` | 单文件上传上限 | 默认 5 MiB |
@@ -40,7 +43,7 @@ openssl rand -base64 48
 openssl rand -hex 24
 ```
 
-配置 `APP_ENV=production` 后，后端会拒绝默认 Secret、占位域名、本地地址、开发登录和不完整的微信配置。可在启动服务前执行不泄露 Secret 的预检：
+配置 `APP_ENV=production` 后，后端会拒绝默认 Secret、占位域名、本地地址、开发登录；启用 `WECHAT_SUBSCRIBE_ENABLED` 时也会拒绝不完整的双模板配置。模板 ID 不是 Secret，但只在配置模板中保留空占位，真实 AppSecret、Token 和数据库密码不得提交。可在启动服务前执行不泄露 Secret 的预检：
 
 ```bash
 docker compose -f deploy/compose.yml --env-file deploy/.env run --rm --no-deps db-init \

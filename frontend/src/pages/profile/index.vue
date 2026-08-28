@@ -9,13 +9,16 @@ import StickerTabBar from '../../components/StickerTabBar.vue'
 // #endif
 import { useAppStore } from '../../stores/useAppStore'
 import { useUserStore } from '../../stores/useUserStore'
+import { useMessageStore } from '../../stores/useMessageStore'
 import { syncTabBarSelected } from '../../utils/tabbar'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
+const messageStore = useMessageStore()
 const loading = ref(true)
 const errorMessage = ref('')
 const menuItems = [
+  { key: 'messages', icon: '✉', label: '消息中心', path: '/pages/messages/index', color: '#e8755f' },
   { key: 'favorites', icon: '☆', label: '我的收藏', path: '/pages/favorites/index', color: '#f0a028' },
   { key: 'reviews', icon: '●●●', label: '我的评价', path: '/pages/reviews/index', color: '#46a8d7' },
   { key: 'history', icon: '◷', label: '历史记录', path: '/pages/history/index', color: '#47aeb6' },
@@ -45,6 +48,7 @@ async function loadProfile(refresh = false) {
     const shouldRefresh = userStore.initialized
     await userStore.initialize()
     if (shouldRefresh) await userStore.refreshProfile()
+    await messageStore.refreshUnread()
   } catch (error) {
     errorMessage.value = error instanceof ApiClientError ? error.message : '用户资料加载失败，请重试'
     uni.showToast({ title: error instanceof ApiClientError ? error.message : '用户资料加载失败', icon: 'none' })
@@ -92,6 +96,7 @@ onPullDownRefresh(() => { void loadProfile(true) })
         <view v-else class="menu-row" @tap="handleMenu(item)">
           <view class="menu-icon" :class="`menu-icon-${item.key}`" :style="{ color: item.color }">{{ item.icon }}</view>
           <text class="menu-label">{{ item.label }}</text>
+          <text v-if="item.key==='messages'&&messageStore.unreadCount" class="message-badge">{{messageStore.unreadCount>99?'99+':messageStore.unreadCount}}</text>
           <text class="arrow">›</text>
         </view>
       </template>
@@ -127,6 +132,7 @@ onPullDownRefresh(() => { void loadProfile(true) })
 .menu-icon-reviews::after { position: absolute; bottom: 7rpx; left: 10rpx; border-top: 8rpx solid #46a8d7; border-right: 7rpx solid transparent; content: ''; transform: rotate(18deg); }
 .share-icon { letter-spacing: -8rpx; transform: rotate(-32deg); }
 .menu-label { flex: 1; padding-left: 16rpx; font-size: 31rpx; }
+.message-badge{min-width:38rpx;height:38rpx;padding:0 10rpx;border-radius:19rpx;background:var(--brand);color:#fff;font-size:20rpx;line-height:38rpx;text-align:center}
 .arrow { color: #a98c70; font-size: 40rpx; }
 .share-row { overflow: visible; border-radius: 0; box-shadow: none; }
 .share-row::after { display: none; border: 0; }

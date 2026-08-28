@@ -17,6 +17,15 @@ class Settings(BaseSettings):
     dev_auth_enabled: bool = Field(default=False, validation_alias="DEV_AUTH_ENABLED")
     wechat_app_id: str | None = Field(default=None, validation_alias="WECHAT_APP_ID")
     wechat_app_secret: str | None = Field(default=None, validation_alias="WECHAT_APP_SECRET")
+    wechat_subscribe_enabled: bool = Field(default=False, validation_alias="WECHAT_SUBSCRIBE_ENABLED")
+    wechat_notification_template_id: str | None = Field(default=None, validation_alias="WECHAT_NOTIFICATION_TEMPLATE_ID")
+    wechat_notification_title_key: str | None = Field(default=None, validation_alias="WECHAT_NOTIFICATION_TITLE_KEY")
+    wechat_notification_content_key: str | None = Field(default=None, validation_alias="WECHAT_NOTIFICATION_CONTENT_KEY")
+    wechat_notification_time_key: str | None = Field(default=None, validation_alias="WECHAT_NOTIFICATION_TIME_KEY")
+    wechat_announcement_template_id: str | None = Field(default=None, validation_alias="WECHAT_ANNOUNCEMENT_TEMPLATE_ID")
+    wechat_announcement_title_key: str | None = Field(default=None, validation_alias="WECHAT_ANNOUNCEMENT_TITLE_KEY")
+    wechat_announcement_content_key: str | None = Field(default=None, validation_alias="WECHAT_ANNOUNCEMENT_CONTENT_KEY")
+    wechat_announcement_time_key: str | None = Field(default=None, validation_alias="WECHAT_ANNOUNCEMENT_TIME_KEY")
 
     postgres_host: str = Field(validation_alias="POSTGRES_HOST")
     postgres_port: int = Field(validation_alias="POSTGRES_PORT")
@@ -79,7 +88,37 @@ class Settings(BaseSettings):
             raise ValueError("JWT_EXPIRE_SECONDS must be positive")
         if self.max_upload_bytes <= 0:
             raise ValueError("MAX_UPLOAD_BYTES must be positive")
+        if self.wechat_subscribe_enabled:
+            required = {
+                "WECHAT_APP_ID": self.wechat_app_id,
+                "WECHAT_APP_SECRET": self.wechat_app_secret,
+                "WECHAT_NOTIFICATION_TEMPLATE_ID": self.wechat_notification_template_id,
+                "WECHAT_NOTIFICATION_TITLE_KEY": self.wechat_notification_title_key,
+                "WECHAT_NOTIFICATION_CONTENT_KEY": self.wechat_notification_content_key,
+                "WECHAT_NOTIFICATION_TIME_KEY": self.wechat_notification_time_key,
+                "WECHAT_ANNOUNCEMENT_TEMPLATE_ID": self.wechat_announcement_template_id,
+                "WECHAT_ANNOUNCEMENT_TITLE_KEY": self.wechat_announcement_title_key,
+                "WECHAT_ANNOUNCEMENT_CONTENT_KEY": self.wechat_announcement_content_key,
+                "WECHAT_ANNOUNCEMENT_TIME_KEY": self.wechat_announcement_time_key,
+            }
+            missing = [name for name, value in required.items() if not value or not value.strip()]
+            if missing:
+                raise ValueError(f"微信订阅消息已启用，但缺少配置：{', '.join(missing)}")
         return self
+
+    def wechat_template(self, kind: str) -> tuple[str, str, str, str] | None:
+        values = (
+            self.wechat_notification_template_id,
+            self.wechat_notification_title_key,
+            self.wechat_notification_content_key,
+            self.wechat_notification_time_key,
+        ) if kind == "notification" else (
+            self.wechat_announcement_template_id,
+            self.wechat_announcement_title_key,
+            self.wechat_announcement_content_key,
+            self.wechat_announcement_time_key,
+        )
+        return tuple(str(value) for value in values) if all(values) else None
 
     @staticmethod
     def _validate_production_secret(name: str, value: str, *, minimum_length: int) -> None:

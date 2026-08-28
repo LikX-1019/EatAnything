@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { onLaunch } from '@dcloudio/uni-app'
+import { onHide, onLaunch, onShow } from '@dcloudio/uni-app'
+import { useMessageStore } from './stores/useMessageStore'
+
+const messageStore=useMessageStore()
 
 const CHEESE_FONT_URL = 'https://cdn.jsdelivr.net/npm/@fontpkg/xiao-ke-nai-lao-ti-shang-yong-mian-fei-qing-ke-zi-ti@1.0.0/%E5%B0%8F%E5%8F%AF%E5%A5%B6%E9%85%AA%E4%BD%93.ttf'
 
@@ -20,6 +23,8 @@ onLaunch(() => {
   console.info('校园吃什么已启动')
   loadMiniProgramFont()
 })
+onShow(()=>messageStore.startPolling())
+onHide(()=>messageStore.stopPolling())
 </script>
 
 <style>
