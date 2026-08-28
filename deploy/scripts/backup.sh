@@ -26,7 +26,9 @@ COMPOSE=(docker compose --project-name "${COMPOSE_PROJECT_NAME}" --file "${DEPLO
 echo "备份 PostgreSQL（不输出密码）..."
 "${COMPOSE[@]}" exec -T postgres pg_dump --format=custom --no-owner --no-acl --username="${POSTGRES_USER}" "${POSTGRES_DB}" > "${TARGET}/postgres.dump"
 echo "备份 MinIO 公开和私有 bucket..."
-"${COMPOSE[@]}" run --rm --no-deps -v "${TARGET}:/backup" minio-init sh -c 'scheme=http; [ "$MINIO_SECURE" = "true" ] && scheme=https; mc alias set local "${scheme}://${MINIO_ENDPOINT}" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null && mc mirror --overwrite "local/${MINIO_BUCKET}" /backup/minio-public && mc mirror --overwrite "local/${MINIO_PRIVATE_BUCKET}" /backup/minio-private' >/dev/null
+# minio-init 服务自身已经配置 `/bin/sh -c` 入口。这里显式覆盖入口，避免
+# 再追加一层 `sh -c` 后外层 shell 只执行 `sh` 并等待标准输入。
+"${COMPOSE[@]}" run --rm --no-deps --entrypoint /bin/sh -v "${TARGET}:/backup" minio-init -c 'scheme=http; [ "$MINIO_SECURE" = "true" ] && scheme=https; mc alias set local "${scheme}://${MINIO_ENDPOINT}" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null && mc mirror --overwrite "local/${MINIO_BUCKET}" /backup/minio-public && mc mirror --overwrite "local/${MINIO_PRIVATE_BUCKET}" /backup/minio-private' >/dev/null
 (
     cd -- "${TARGET}"
     sha256sum postgres.dump > SHA256SUMS
