@@ -11,9 +11,8 @@ from app.repositories.users import get_or_create_user
 
 
 def user_auth_response(settings: Settings, user: AppUser) -> dict:
-    avatar_url = None
-    if user.avatar:
-        avatar_url = None
+    # 登录响应只使用已加载的外键字段，避免异步会话隐式触发头像关系查询。
+    avatar_url = "/api/v1/me/avatar/file" if user.avatar_media_id else None
     return {
         "access_token": create_access_token(settings, subject=str(user.id), kind="user"),
         "token_type": "Bearer",

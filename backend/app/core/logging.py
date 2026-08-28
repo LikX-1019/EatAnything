@@ -5,6 +5,8 @@ import structlog
 
 def configure_logging() -> structlog.BoundLogger:
     logging.basicConfig(format="%(message)s", level=logging.INFO)
+    # httpx 的 INFO 日志会包含完整请求 URL，微信接口查询参数中含有敏感凭据。
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
