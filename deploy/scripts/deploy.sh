@@ -358,7 +358,8 @@ main() {
     if [[ "$(read_env_value APP_ENV || true)" == "production" || "$(read_env_value APP_ENV || true)" == "prod" ]]; then
         CURRENT_STEP="生产配置预检"
         log "执行生产配置预检（不输出 Secret）..."
-        "${COMPOSE[@]}" run --rm --no-deps db-init python /app/scripts/validate_production_config.py
+        # PYTHONPATH=/app：脚本以绝对路径运行时需要能导入 app 包
+        "${COMPOSE[@]}" run --rm --no-deps -e PYTHONPATH=/app db-init python /app/scripts/validate_production_config.py
     fi
 
     CURRENT_STEP="启动基础服务"
