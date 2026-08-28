@@ -40,6 +40,10 @@ function handleMenu(item: typeof menuItems[number]) {
   })
 }
 
+function editProfile() {
+  uni.navigateTo({ url: '/pages/settings/index' })
+}
+
 onShareAppMessage(() => ({ title: '校园吃什么？让它帮你选一家', path: '/pages/home/index' }))
 async function loadProfile(refresh = false) {
   loading.value = !refresh
@@ -67,7 +71,7 @@ onPullDownRefresh(() => { void loadProfile(true) })
 <template>
   <view class="page-shell profile-page" :class="appStore.fontClass">
     <PageHeader title="我的" dark />
-    <view v-if="loading" class="profile-state">正在加载个人资料…</view><view v-else-if="errorMessage" class="profile-state"><text>{{ errorMessage }}</text><button class="retry-button" @tap="loadProfile()">重新加载</button></view><template v-else><view class="profile-hero">
+    <view v-if="loading" class="profile-state">正在加载个人资料…</view><view v-else-if="errorMessage" class="profile-state"><text>{{ errorMessage }}</text><button class="retry-button" @tap="loadProfile()">重新加载</button></view><template v-else><view class="profile-hero" hover-class="tap-active" @tap="editProfile">
       <view class="identity">
         <FallbackImage v-if="userStore.profile?.avatarUrl" class="avatar avatar-image" :src="userStore.profile.avatarUrl" />
         <view v-else class="avatar">👩🏻‍🍳</view>
@@ -76,6 +80,7 @@ onPullDownRefresh(() => { void loadProfile(true) })
           <text class="profile-slogan">{{ userStore.profile?.slogan || '今天也要好好吃饭' }}</text>
           <text class="profile-school">{{ userStore.profile?.school?.name || '尚未选择学校' }}</text>
           <text class="level">Lv.{{ userStore.profile?.level ?? 0 }}</text>
+          <text class="edit-hint">点击编辑资料 ›</text>
         </view>
       </view>
       <view class="stats">
@@ -120,6 +125,7 @@ onPullDownRefresh(() => { void loadProfile(true) })
 .profile-name, .profile-slogan { display: block; }
 .profile-name { font-size: 41rpx; font-weight: 900; }.profile-slogan { margin-top: 8rpx; color: var(--muted); font-size: 25rpx; }.level { width: fit-content; margin-top: 8rpx; padding: 4rpx 11rpx; border-radius: 8rpx; background: #ec9350; color: #fff; font-size: 21rpx; font-weight: 900; }
 .profile-school { display: block; margin-top: 6rpx; color: var(--brand-deep); font-size: 22rpx; }
+.edit-hint { display: block; margin-top: 8rpx; color: var(--muted); font-size: 20rpx; text-decoration: underline; }
 .stats { display: flex; align-items: center; padding: 22rpx 10rpx; border: 2rpx dashed #d69c71; border-radius: 17rpx; background: rgba(255,253,246,.8); color: var(--ink); }
 .stat { display: flex; flex: 1; align-items: center; flex-direction: column; }
 .stat text { font-size: 39rpx; font-weight: 900; }.stat small { margin-top: 7rpx; color: #6d5745; font-size: 23rpx; }

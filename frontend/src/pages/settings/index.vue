@@ -128,7 +128,13 @@ async function saveProfile(){
     savingProfile.value=false
   }
 }
-onShow(()=>{void loadNotificationSettings();void userStore.initialize().then(loadProfileForm)})
+onShow(()=>{
+  void loadNotificationSettings()
+  void userStore.initialize().then(loadProfileForm).catch(()=>{
+    loadProfileForm()
+    uni.showToast({title:'资料加载失败，请稍后重试',icon:'none'})
+  })
+})
 </script>
 
 <template>
