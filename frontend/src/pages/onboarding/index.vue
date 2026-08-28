@@ -11,15 +11,44 @@ const step = ref<1 | 2>(1)
 const avatarTempPath = ref('')
 const nickname = ref('')
 const slogan = ref('')
+const avatarUploading = ref(false)
+const avatarError = ref('')
 const savingProfile = ref(false)
 const savingError = ref('')
 const loadingSchools = ref(false)
 const schoolsError = ref('')
 const selectingSchoolId = ref<string | null>(null)
 
+async function uploadChosenAvatar(path: string) {
+  avatarUploading.value = true
+  avatarError.value = ''
+  try {
+    await uploadAvatar(path)
+    await userStore.refreshProfile()
+    avatarTempPath.value = ''
+    uni.showToast({ title: '头像已更新', icon: 'success' })
+  } catch (error) {
+    avatarError.value = error instanceof ApiClientError ? error.message : '头像上传失败，请检查网络后重试'
+  } finally {
+    avatarUploading.value = false
+  }
+}
+
 function onChooseAvatar(event: unknown) {
   const detail = (event as { detail?: { avatarUrl?: string } }).detail
-  if (detail?.avatarUrl) avatarTempPath.value = detail.avatarUrl
+  if (detail?.avatarUrl) void uploadChosenAvatar(detail.avatarUrl)
+}
+
+function chooseAvatarFromAlbum() {
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['album'],
+    success: (result) => {
+      const path = result.tempFilePaths[0]
+      if (path) void uploadChosenAvatar(path)
+    },
+  })
 }
 
 async function loadSchools() {
@@ -46,10 +75,6 @@ async function saveProfileAndNext() {
   savingProfile.value = true
   savingError.value = ''
   try {
-    if (avatarTempPath.value) {
-      await uploadAvatar(avatarTempPath.value)
-      avatarTempPath.value = ''
-    }
     const updates: ProfileUpdate = {}
     if (nickname.value.trim()) updates.nickname = nickname.value.trim()
     if (slogan.value.trim()) updates.slogan = slogan.value.trim()
@@ -118,9 +143,12 @@ onShow(() => {
       <view class="panel-note">微信会自动填充头像和昵称，也可以跳过</view>
       <!-- #ifdef MP-WEIXIN -->
       <view class="avatar-row">
-        <image v-if="avatarTempPath" class="avatar-preview" :src="avatarTempPath" mode="aspectFill" />
+        <image v-if="avatarTempPath || userStore.profile?.avatarUrl" class="avatar-preview" :src="avatarTempPath || userStore.profile?.avatarUrl || ''" mode="aspectFill" />
         <view v-else class="avatar-preview placeholder">👩🏻‍🍳</view>
-        <button class="avatar-button" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">选择微信头像</button>
+        <view class="avatar-actions">
+          <button class="avatar-button" open-type="chooseAvatar" :disabled="avatarUploading" @chooseavatar="onChooseAvatar">{{ avatarUploading ? '上传中…' : '选择微信头像' }}</button>
+          <button class="avatar-button album-button" :disabled="avatarUploading" @tap="chooseAvatarFromAlbum">从相册选择</button>
+        </view>
       </view>
       <!-- #endif -->
       <view class="form-row">
@@ -131,6 +159,7 @@ onShow(() => {
         <text class="form-label">签名</text>
         <input v-model="slogan" class="form-input" maxlength="255" placeholder="一句话介绍自己（可选）" placeholder-class="form-placeholder" />
       </view>
+      <view v-if="avatarError" class="form-error">{{ avatarError }}</view>
       <view v-if="savingError" class="form-error">{{ savingError }}</view>
       <button class="primary-button" :disabled="savingProfile" @tap="saveProfileAndNext">{{ savingProfile ? '保存中…' : '下一步' }}</button>
       <button class="skip-button" :disabled="savingProfile" @tap="skipProfile">跳过，直接选学校</button>
@@ -176,6 +205,8 @@ onShow(() => {
 .avatar-row { display: flex; align-items: center; gap: 26rpx; margin-top: 30rpx; }
 .avatar-preview { display: flex; align-items: center; justify-content: center; width: 128rpx; height: 128rpx; border: 5rpx solid #fff; border-radius: 50%; background: #f7dfc9; font-size: 56rpx; box-shadow: 0 0 0 2rpx #e7c7ad; }
 .avatar-button { padding: 0 26rpx; height: 68rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 25rpx; }
+.avatar-actions { display: flex; flex-direction: column; gap: 14rpx; }
+.album-button { background: var(--green); box-shadow: 0 4rpx 0 #5f8857; }
 .form-row { display: flex; align-items: center; margin-top: 26rpx; padding: 0 20rpx; height: 84rpx; border: 1rpx dashed #dfccb0; border-radius: 10rpx; background: #fffdf6; }
 .form-label { flex: 0 0 96rpx; color: var(--brand-deep); font-size: 26rpx; font-weight: 800; }
 .form-input { flex: 1; height: 78rpx; font-size: 27rpx; }

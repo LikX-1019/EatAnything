@@ -23,6 +23,7 @@ const gender=ref<string>('')
 const birthday=ref('')
 const genderIndex=ref(0)
 const avatarTempPath=ref('')
+const avatarUploading=ref(false)
 const savingProfile=ref(false)
 function todayIso():string{const d=new Date();const mm=String(d.getMonth()+1).padStart(2,'0');const dd=String(d.getDate()).padStart(2,'0');return `${d.getFullYear()}-${mm}-${dd}`}
 const today=todayIso()
@@ -59,9 +60,33 @@ function loadProfileForm(){
   genderIndex.value=Math.max(0,GENDER_OPTIONS.findIndex(item=>item.value===gender.value))
   avatarTempPath.value=''
 }
+async function uploadChosenAvatar(path:string){
+  avatarUploading.value=true
+  try{
+    await uploadAvatar(path)
+    await userStore.refreshProfile()
+    avatarTempPath.value=''
+    uni.showToast({title:'头像已更新',icon:'success'})
+  }catch(error){
+    uni.showToast({title:error instanceof ApiClientError?error.message:'头像上传失败，请检查网络',icon:'none'})
+  }finally{
+    avatarUploading.value=false
+  }
+}
 function onChooseAvatar(event:unknown){
   const detail=(event as {detail?:{avatarUrl?:string}}).detail
-  if(detail?.avatarUrl)avatarTempPath.value=detail.avatarUrl
+  if(detail?.avatarUrl)void uploadChosenAvatar(detail.avatarUrl)
+}
+function chooseAvatarFromAlbum(){
+  uni.chooseImage({
+    count:1,
+    sizeType:['compressed'],
+    sourceType:['album'],
+    success:(result)=>{
+      const path=result.tempFilePaths[0]
+      if(path)void uploadChosenAvatar(path)
+    },
+  })
 }
 function onGenderChange(event:unknown){
   const value=Number((event as {detail?:{value?:number}}).detail?.value??0)
@@ -73,15 +98,6 @@ function onBirthdayChange(event:unknown){
 async function saveProfile(){
   savingProfile.value=true
   try{
-    if(avatarTempPath.value){
-      try{
-        await uploadAvatar(avatarTempPath.value)
-        avatarTempPath.value=''
-      }catch(error){
-        uni.showToast({title:error instanceof ApiClientError?error.message:'头像上传失败，请检查网络',icon:'none'})
-        return
-      }
-    }
     const payload:ProfileUpdate={}
     if(nickname.value.trim())payload.nickname=nickname.value.trim()
     payload.slogan=slogan.value.trim()||null
@@ -113,7 +129,10 @@ onShow(()=>{void loadNotificationSettings();void userStore.initialize().then(loa
         <view class="profile-avatar-row">
           <image v-if="avatarTempPath||userStore.profile?.avatarUrl" class="profile-avatar" :src="avatarTempPath||userStore.profile?.avatarUrl||''" mode="aspectFill" />
           <view v-else class="profile-avatar avatar-placeholder">👩🏻‍🍳</view>
-          <button class="avatar-button" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">选择微信头像</button>
+          <view class="avatar-actions">
+            <button class="avatar-button" open-type="chooseAvatar" :disabled="avatarUploading" @chooseavatar="onChooseAvatar">{{ avatarUploading ? '上传中…' : '选择微信头像' }}</button>
+            <button class="avatar-button album-button" :disabled="avatarUploading" @tap="chooseAvatarFromAlbum">从相册选择</button>
+          </view>
         </view>
         <!-- #endif -->
         <view class="profile-row"><text class="profile-label">昵称</text><input v-model="nickname" class="profile-input" maxlength="80" placeholder="请输入昵称" placeholder-class="profile-placeholder" /></view>
@@ -178,5 +197,5 @@ onShow(()=>{void loadNotificationSettings();void userStore.initialize().then(loa
 .tip-note { display: flex; gap: 13rpx; margin-top: 26rpx; padding: 18rpx 20rpx; border: 1rpx dashed #d2b990; border-radius: 10rpx; background: rgba(255,247,226,.75); color: var(--muted); font-size: 25rpx; line-height: 1.55; }
 .tip-icon { flex: 0 0 auto; }
 .notification-label{margin-top:40rpx}.notification-sheet{padding:24rpx;border:1rpx solid #dfc7a5;border-radius:12rpx;background:#fffaf0;box-shadow:var(--paper-shadow)}.notification-row{display:flex;align-items:center;justify-content:space-between;gap:20rpx}.template-state{display:flex;gap:22rpx;margin-top:22rpx;color:var(--muted);font-size:22rpx}.subscribe-button{width:100%;height:76rpx;margin-top:24rpx;border-radius:10rpx;background:var(--brand);color:#fff;font-size:27rpx;font-weight:900}.subscribe-button[disabled]{opacity:.55}
-.profile-label{margin-bottom:18rpx}.profile-sheet{padding:24rpx;border:1rpx solid #dfc7a5;border-radius:12rpx;background:#fffaf0;box-shadow:var(--paper-shadow)}.profile-avatar-row{display:flex;align-items:center;gap:26rpx;margin-bottom:20rpx}.profile-avatar{display:flex;align-items:center;justify-content:center;width:118rpx;height:118rpx;border:4rpx solid #fff;border-radius:50%;background:#f7dfc9;font-size:52rpx;box-shadow:0 0 0 2rpx #e7c7ad}.avatar-button{padding:0 24rpx;height:64rpx;border-radius:10rpx;background:var(--brand);color:#fff;font-size:24rpx}.profile-row{display:flex;align-items:center;min-height:82rpx;border-bottom:1rpx dashed #e6d8c2}.profile-label{flex:0 0 96rpx;color:var(--brand-deep);font-size:26rpx;font-weight:800}.profile-input{flex:1;height:78rpx;font-size:27rpx}.profile-placeholder{color:#b7a48f}.profile-picker{display:flex;align-items:center;min-height:78rpx;font-size:27rpx}.save-profile-button{width:100%;height:76rpx;margin-top:22rpx;border-radius:10rpx;background:var(--brand);color:#fff;font-size:27rpx;font-weight:900;box-shadow:0 5rpx 0 #c75f4b}.save-profile-button[disabled]{opacity:.55}
+.profile-label{margin-bottom:18rpx}.profile-sheet{padding:24rpx;border:1rpx solid #dfc7a5;border-radius:12rpx;background:#fffaf0;box-shadow:var(--paper-shadow)}.profile-avatar-row{display:flex;align-items:center;gap:26rpx;margin-bottom:20rpx}.profile-avatar{display:flex;align-items:center;justify-content:center;width:118rpx;height:118rpx;border:4rpx solid #fff;border-radius:50%;background:#f7dfc9;font-size:52rpx;box-shadow:0 0 0 2rpx #e7c7ad}.avatar-actions{display:flex;flex-direction:column;gap:12rpx}.avatar-button{padding:0 24rpx;height:64rpx;border-radius:10rpx;background:var(--brand);color:#fff;font-size:24rpx}.album-button{background:var(--green);box-shadow:0 4rpx 0 #5f8857}.profile-row{display:flex;align-items:center;min-height:82rpx;border-bottom:1rpx dashed #e6d8c2}.profile-label{flex:0 0 96rpx;color:var(--brand-deep);font-size:26rpx;font-weight:800}.profile-input{flex:1;height:78rpx;font-size:27rpx}.profile-placeholder{color:#b7a48f}.profile-picker{display:flex;align-items:center;min-height:78rpx;font-size:27rpx}.save-profile-button{width:100%;height:76rpx;margin-top:22rpx;border-radius:10rpx;background:var(--brand);color:#fff;font-size:27rpx;font-weight:900;box-shadow:0 5rpx 0 #c75f4b}.save-profile-button[disabled]{opacity:.55}
 </style>
