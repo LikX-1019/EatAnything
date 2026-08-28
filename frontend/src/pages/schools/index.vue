@@ -25,6 +25,7 @@ async function selectSchool(id: string) {
   selectingSchoolId.value = id
   try {
     await userStore.selectSchool(id)
+    uni.removeStorageSync('onboarding_dismissed')
     await appStore.reloadForSchool()
     uni.navigateBack()
   } catch (error) {

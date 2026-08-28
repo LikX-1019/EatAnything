@@ -74,17 +74,26 @@ async function saveProfile(){
   savingProfile.value=true
   try{
     if(avatarTempPath.value){
-      await uploadAvatar(avatarTempPath.value)
-      avatarTempPath.value=''
+      try{
+        await uploadAvatar(avatarTempPath.value)
+        avatarTempPath.value=''
+      }catch(error){
+        uni.showToast({title:error instanceof ApiClientError?error.message:'头像上传失败，请检查网络',icon:'none'})
+        return
+      }
     }
     const payload:ProfileUpdate={}
     if(nickname.value.trim())payload.nickname=nickname.value.trim()
     payload.slogan=slogan.value.trim()||null
     payload.gender=(gender.value as ProfileUpdate['gender'])||null
     payload.birthday=birthday.value||null
-    const next=await updateProfile(payload)
-    userStore.profile=next
-    uni.showToast({title:'资料已保存',icon:'success'})
+    try{
+      const next=await updateProfile(payload)
+      userStore.profile=next
+      uni.showToast({title:'资料已保存',icon:'success'})
+    }catch(error){
+      uni.showToast({title:error instanceof ApiClientError?error.message:'资料保存失败',icon:'none'})
+    }
   }catch(error){
     uni.showToast({title:error instanceof ApiClientError?error.message:'资料保存失败',icon:'none'})
   }finally{

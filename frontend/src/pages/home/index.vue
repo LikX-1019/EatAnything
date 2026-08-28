@@ -38,7 +38,7 @@ async function loadHome(refresh = false) {
     if (refresh) await appStore.refresh()
     else await appStore.initialize()
     await messageStore.refreshAnnouncements()
-    if (!userStore.profile?.schoolId && !onboardingRedirected) {
+    if (!userStore.profile?.schoolId && !onboardingRedirected && !uni.getStorageSync('onboarding_dismissed')) {
       onboardingRedirected = true
       uni.redirectTo({ url: '/pages/onboarding/index' })
       return

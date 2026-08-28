@@ -6,19 +6,40 @@ import { updateProfile, uploadAvatar, type ProfileUpdate } from '../../api/users
 import { useUserStore } from '../../stores/useUserStore'
 
 const userStore = useUserStore()
+const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 24
 const step = ref<1 | 2>(1)
 const avatarTempPath = ref('')
 const nickname = ref('')
 const slogan = ref('')
 const savingProfile = ref(false)
 const savingError = ref('')
-const loadingSchools = ref(true)
+const loadingSchools = ref(false)
 const schoolsError = ref('')
 const selectingSchoolId = ref<string | null>(null)
 
 function onChooseAvatar(event: unknown) {
   const detail = (event as { detail?: { avatarUrl?: string } }).detail
   if (detail?.avatarUrl) avatarTempPath.value = detail.avatarUrl
+}
+
+async function loadSchools() {
+  loadingSchools.value = true
+  schoolsError.value = ''
+  try {
+    await userStore.initialize()
+    if (!userStore.schools.length) {
+      await userStore.loadSchools()
+    }
+  } catch (error) {
+    schoolsError.value = error instanceof ApiClientError ? error.message : '学校列表加载失败，请检查网络后重试'
+  } finally {
+    loadingSchools.value = false
+  }
+}
+
+function enterSchoolStep() {
+  step.value = 2
+  void loadSchools()
 }
 
 async function saveProfileAndNext() {
@@ -36,28 +57,21 @@ async function saveProfileAndNext() {
       const next = await updateProfile(updates)
       userStore.profile = next
     }
-    step.value = 2
+    enterSchoolStep()
   } catch (error) {
-    savingError.value = error instanceof ApiClientError ? error.message : '资料保存失败，请重试'
+    savingError.value = error instanceof ApiClientError ? error.message : '资料保存失败，请检查网络后重试'
   } finally {
     savingProfile.value = false
   }
 }
 
 function skipProfile() {
-  step.value = 2
+  enterSchoolStep()
 }
 
-async function loadSchools() {
-  loadingSchools.value = true
-  schoolsError.value = ''
-  try {
-    await userStore.initialize()
-  } catch (error) {
-    schoolsError.value = error instanceof ApiClientError ? error.message : '学校列表加载失败，请重试'
-  } finally {
-    loadingSchools.value = false
-  }
+function dismissOnboarding() {
+  uni.setStorageSync('onboarding_dismissed', '1')
+  uni.reLaunch({ url: '/pages/home/index' })
 }
 
 async function selectSchool(id: string) {
@@ -65,6 +79,7 @@ async function selectSchool(id: string) {
   selectingSchoolId.value = id
   try {
     await userStore.selectSchool(id)
+    uni.removeStorageSync('onboarding_dismissed')
     uni.reLaunch({ url: '/pages/home/index' })
   } catch (error) {
     uni.showToast({ title: error instanceof ApiClientError ? error.message : '学校绑定失败', icon: 'none' })
@@ -85,15 +100,22 @@ onShow(() => {
 
 <template>
   <view class="page-shell onboarding-page">
-    <view class="step-bar">
-      <text class="step-item" :class="{ active: step === 1 }">1 完善资料</text>
-      <text class="step-arrow">→</text>
-      <text class="step-item" :class="{ active: step === 2 }">2 选择学校</text>
+    <view class="onboarding-header" :style="{ paddingTop: `${statusBarHeight}px` }">
+      <view class="header-bar">
+        <view class="back-button" @tap="dismissOnboarding">‹</view>
+        <text class="header-title">欢迎使用校园吃什么</text>
+        <view class="back-button placeholder" />
+      </view>
+      <view class="step-bar">
+        <text class="step-item" :class="{ active: step === 1 }">1 完善资料</text>
+        <text class="step-arrow">→</text>
+        <text class="step-item" :class="{ active: step === 2 }">2 选择学校</text>
+      </view>
     </view>
 
     <view v-if="step === 1" class="step-panel">
       <view class="panel-title">你好，先认识一下吧</view>
-      <view class="panel-note">微信会自动填充头像和昵称，也可以直接跳过</view>
+      <view class="panel-note">微信会自动填充头像和昵称，也可以跳过</view>
       <!-- #ifdef MP-WEIXIN -->
       <view class="avatar-row">
         <image v-if="avatarTempPath" class="avatar-preview" :src="avatarTempPath" mode="aspectFill" />
@@ -132,17 +154,23 @@ onShow(() => {
         </view>
         <view v-if="!userStore.schools.length" class="page-state">暂无可选学校</view>
       </template>
+      <button class="back-step-button" @tap="step = 1">‹ 上一步</button>
     </view>
   </view>
 </template>
 
 <style scoped>
-.onboarding-page { min-height: 100vh; padding: 40rpx 30rpx; background: var(--page); }
-.step-bar { display: flex; align-items: center; justify-content: center; gap: 18rpx; padding: 12rpx 0 30rpx; }
+.onboarding-page { min-height: 100vh; background: var(--page); }
+.onboarding-header { position: sticky; top: 0; z-index: 10; padding-bottom: 12rpx; background: var(--page); }
+.header-bar { display: flex; align-items: center; justify-content: space-between; height: 88rpx; padding: 0 24rpx; }
+.back-button { display: flex; align-items: center; justify-content: center; width: 64rpx; height: 64rpx; color: var(--ink); font-size: 52rpx; font-weight: 300; line-height: 1; }
+.back-button.placeholder { visibility: hidden; }
+.header-title { font-size: 32rpx; font-weight: 900; }
+.step-bar { display: flex; align-items: center; justify-content: center; gap: 18rpx; padding: 6rpx 0 16rpx; }
 .step-item { font-size: 25rpx; color: var(--muted); font-weight: 800; }
 .step-item.active { color: var(--brand); }
 .step-arrow { color: var(--line); }
-.step-panel { padding: 30rpx 26rpx; border: 1rpx solid #e1c8a5; border-radius: 5rpx 12rpx 7rpx 9rpx; background: #fffaf0; box-shadow: var(--paper-shadow); }
+.step-panel { margin: 0 30rpx 40rpx; padding: 30rpx 26rpx; border: 1rpx solid #e1c8a5; border-radius: 5rpx 12rpx 7rpx 9rpx; background: #fffaf0; box-shadow: var(--paper-shadow); }
 .panel-title { font-size: 38rpx; font-weight: 900; }
 .panel-note { margin-top: 10rpx; color: var(--muted); font-size: 24rpx; }
 .avatar-row { display: flex; align-items: center; gap: 26rpx; margin-top: 30rpx; }
@@ -156,6 +184,7 @@ onShow(() => {
 .primary-button { width: 100%; height: 82rpx; margin-top: 34rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 29rpx; font-weight: 900; box-shadow: 0 5rpx 0 #c75f4b; }
 .primary-button[disabled] { opacity: .55; }
 .skip-button { width: 100%; height: 72rpx; margin-top: 14rpx; color: var(--muted); font-size: 25rpx; }
+.back-step-button { width: 100%; height: 72rpx; margin-top: 16rpx; color: var(--muted); font-size: 25rpx; }
 .page-state { padding: 60rpx 20rpx; color: var(--muted); text-align: center; font-size: 26rpx; }
 .retry-button { margin: 22rpx auto 0; padding: 0 26rpx; height: 68rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 25rpx; }
 .school-option { display: flex; align-items: center; justify-content: space-between; min-height: 92rpx; padding: 16rpx 4rpx; border-bottom: 1rpx solid var(--line); }
