@@ -9,6 +9,7 @@
     { "path": "pages/settings/index", "style": { "navigationStyle": "custom" } },
     { "path": "pages/messages/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
     { "path": "pages/messages/detail", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/onboarding/index", "style": { "navigationStyle": "custom" } },
     { "path": "pages/schools/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
     { "path": "pages/favorites/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },
     { "path": "pages/reviews/index", "style": { "navigationStyle": "custom", "enablePullDownRefresh": true } },

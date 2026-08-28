@@ -1,12 +1,18 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.minio import MinioStorage
+from app.models import MediaObject
 from app.repositories.users import user_stats
 
 
 async def profile(session: AsyncSession, storage: MinioStorage, user) -> dict:
-    # 用户头像属于私有媒体；在提供鉴权媒体代理前不返回可公开访问的 URL。
+    # 头像为公开桶中不可猜测的 UUID 对象，可直接返回公开 URL；
+    # 评价等他人可见列表仍使用占位，不暴露头像地址。
     avatar_url = None
+    if user.avatar_media_id is not None:
+        avatar = await session.get(MediaObject, user.avatar_media_id)
+        if avatar is not None:
+            avatar_url = storage.public_object_url(avatar.object_key)
     return {
         "id": str(user.id),
         "nickname": user.nickname,
@@ -25,6 +31,8 @@ async def profile(session: AsyncSession, storage: MinioStorage, user) -> dict:
             else None
         ),
         "slogan": user.slogan,
+        "gender": user.gender,
+        "birthday": user.birthday.isoformat() if user.birthday is not None else None,
         "level": user.level,
         "stats": await user_stats(session, user.id),
         "created_at": user.created_at.isoformat(),

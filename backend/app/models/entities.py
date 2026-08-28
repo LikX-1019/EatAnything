@@ -64,6 +64,8 @@ class AppUser(Base):
     nickname: Mapped[str] = mapped_column(String(80))
     avatar_media_id: Mapped[int | None] = mapped_column(ForeignKey("media_objects.id", ondelete="SET NULL"))
     slogan: Mapped[str | None] = mapped_column(String(255))
+    gender: Mapped[str | None] = mapped_column(String(20))
+    birthday: Mapped[date | None] = mapped_column(Date)
     level: Mapped[int] = mapped_column(SmallInteger, server_default=text("1"))
     status: Mapped[str] = mapped_column(String(20), server_default=text("'active'"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))

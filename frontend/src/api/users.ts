@@ -1,4 +1,4 @@
-import { get, put } from './client'
+import { get, put, uploadFile } from './client'
 
 export interface SchoolSummary {
   id: string
@@ -24,9 +24,18 @@ export interface UserProfile {
   schoolId?: string | null
   school?: SchoolSummary | null
   slogan?: string | null
+  gender?: 'male' | 'female' | 'other' | 'secret' | null
+  birthday?: string | null
   level: number
   stats: UserStats
   createdAt: string
+}
+
+export interface ProfileUpdate {
+  nickname?: string
+  slogan?: string | null
+  gender?: 'male' | 'female' | 'other' | 'secret' | null
+  birthday?: string | null
 }
 
 export function getCurrentUser(): Promise<UserProfile> {
@@ -39,4 +48,12 @@ export function getSchools(): Promise<SchoolSummary[]> {
 
 export function selectUserSchool(schoolId: string): Promise<UserProfile> {
   return put<UserProfile>(`/me/school/${encodeURIComponent(schoolId)}`)
+}
+
+export function updateProfile(payload: ProfileUpdate): Promise<UserProfile> {
+  return put<UserProfile>('/me/profile', payload)
+}
+
+export function uploadAvatar(filePath: string): Promise<{ avatarUrl: string }> {
+  return uploadFile<{ avatarUrl: string }>('/me/avatar', filePath)
 }

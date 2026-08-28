@@ -145,6 +145,63 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /me/profile:
+    put:
+      operationId: updateCurrentUserProfile
+      tags: [User]
+      summary: 更新当前用户资料（昵称、签名、性别、生日）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      responses:
+        '200':
+          description: 更新后的用户资料
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /me/avatar:
+    post:
+      operationId: uploadCurrentUserAvatar
+      tags: [User]
+      summary: 上传当前用户头像（JPEG/PNG/WebP）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: 头像上传成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvatarUploadResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/BadRequest'
+        '415':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /stores:
     get:
       operationId: listStores
@@ -1243,11 +1300,62 @@ components:
         - type: object
           required: [stats, createdAt]
           properties:
+            schoolId:
+              type: string
+              nullable: true
+            school:
+              $ref: '#/components/schemas/SchoolSummary'
+              nullable: true
+            slogan:
+              type: string
+              nullable: true
+            gender:
+              type: string
+              enum: [male, female, other, secret]
+              nullable: true
+            birthday:
+              type: string
+              format: date
+              nullable: true
             stats:
               $ref: '#/components/schemas/UserStats'
             createdAt:
               type: string
               format: date-time
+
+    ProfileUpdate:
+      type: object
+      properties:
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 80
+          nullable: true
+        slogan:
+          type: string
+          maxLength: 255
+          nullable: true
+        gender:
+          type: string
+          enum: [male, female, other, secret]
+          nullable: true
+        birthday:
+          type: string
+          format: date
+          nullable: true
+
+    AvatarUploadResponse:
+      type: object
+      required: [data, requestId]
+      properties:
+        data:
+          type: object
+          required: [avatarUrl]
+          properties:
+            avatarUrl:
+              type: string
+        requestId:
+          type: string
 
     UserProfileResponse:
       type: object
@@ -1257,6 +1365,26 @@ components:
           $ref: '#/components/schemas/UserProfile'
         requestId:
           type: string
+
+    SchoolSummary:
+      type: object
+      required: [id, schoolCode, name]
+      properties:
+        id:
+          type: string
+        schoolCode:
+          type: string
+        name:
+          type: string
+        city:
+          type: string
+          nullable: true
+        district:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
 
     StoreSummary:
       type: object

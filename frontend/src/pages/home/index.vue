@@ -20,6 +20,7 @@ const isDrawing = ref(false)
 const isCheckingIn = ref(false)
 const loading = ref(true)
 const loadError = ref('')
+let onboardingRedirected = false
 const rollingName = ref('准备好了吗？')
 const DRAW_DURATION_MS = 1000
 const currentPickImageSource = ref('')
@@ -37,6 +38,11 @@ async function loadHome(refresh = false) {
     if (refresh) await appStore.refresh()
     else await appStore.initialize()
     await messageStore.refreshAnnouncements()
+    if (!userStore.profile?.schoolId && !onboardingRedirected) {
+      onboardingRedirected = true
+      uni.redirectTo({ url: '/pages/onboarding/index' })
+      return
+    }
   } catch (error) {
     loadError.value = error instanceof ApiClientError ? error.message : '首页加载失败，请重试'
     showError(error, '核心数据加载失败')
@@ -127,12 +133,25 @@ async function checkIn() {
     if (!filePath) return
     isCheckingIn.value = true
     await appStore.createCheckIn(appStore.currentPick.id, filePath)
-    uni.showToast({ title: '打卡成功，已加入足迹', icon: 'success' })
+    promptReviewAfterCheckIn()
   } catch (error) {
     showError(error, '打卡失败，请重试')
   } finally {
     isCheckingIn.value = false
   }
+}
+function promptReviewAfterCheckIn() {
+  const store = appStore.currentPick
+  if (!store) return
+  uni.showModal({
+    title: '打卡成功',
+    content: `已打卡「${store.name}」，是否立即评价这家店？`,
+    confirmText: '去评价',
+    cancelText: '稍后再说',
+    success: ({ confirm }) => {
+      if (confirm) uni.navigateTo({ url: `/pages/reviews/create?storeId=${encodeURIComponent(store.id)}` })
+    },
+  })
 }
 function formatCheckInTime(value: string): string {
   const date = new Date(value)
