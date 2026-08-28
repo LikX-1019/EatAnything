@@ -35,5 +35,7 @@ echo "备份 MinIO 公开和私有 bucket..."
     printf 'created_at_utc=%s\ncompose_project=%s\npostgres_db=%s\n' \
         "${STAMP}" "${COMPOSE_PROJECT_NAME}" "${POSTGRES_DB}" > manifest.txt
 )
-chmod -R go-rwx "${TARGET}"
+# TARGET 由当前部署用户在 umask 077 下创建；只需保证这个入口目录不可被
+# 其他用户遍历。MinIO 容器写出的文件可能属于 root，递归 chmod 会误报失败。
+chmod go-rwx "${TARGET}"
 echo "备份完成：${TARGET}"
