@@ -104,7 +104,7 @@ async def upload_me_avatar(
         with Image.open(BytesIO(content)) as image:
             image_format = image.format or ""
             width, height = image.size
-    except (UnidentifiedImageError, OSError) as exc:
+    except (UnidentifiedImageError, OSError, SyntaxError) as exc:
         raise ApiError(415, "UNSUPPORTED_FILE_TYPE", "文件不是有效图片") from exc
     content_type = ALLOWED_AVATAR_TYPES.get(image_format.upper())
     if content_type is None:
