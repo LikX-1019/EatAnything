@@ -66,3 +66,10 @@ class ProfileUpdate(SchemaBase):
 
 class AvatarUploadData(SchemaBase):
     avatar_url: str
+
+
+class AvatarUploadDataRequest(SchemaBase):
+    """小程序端通过 JSON base64 上传头像，避免依赖 uploadFile 合法域名。"""
+
+    data_base64: str
+    content_type: str = "image/jpeg"

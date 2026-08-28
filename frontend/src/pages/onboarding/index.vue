@@ -4,11 +4,13 @@ import { ref } from 'vue'
 import { ApiClientError } from '../../api/types'
 import { updateProfile, uploadAvatar, type ProfileUpdate } from '../../api/users'
 import { useUserStore } from '../../stores/useUserStore'
+import { resolveAvatarSource } from '../../utils/authedImage'
 
 const userStore = useUserStore()
 const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 24
 const step = ref<1 | 2>(1)
 const avatarTempPath = ref('')
+const avatarPreviewPath = ref('')
 const nickname = ref('')
 const slogan = ref('')
 const avatarUploading = ref(false)
@@ -26,6 +28,11 @@ async function uploadChosenAvatar(path: string) {
     await uploadAvatar(path)
     await userStore.refreshProfile()
     avatarTempPath.value = ''
+    try {
+      avatarPreviewPath.value = await resolveAvatarSource(userStore.profile?.avatarUrl)
+    } catch {
+      avatarPreviewPath.value = ''
+    }
     uni.showToast({ title: '头像已更新', icon: 'success' })
   } catch (error) {
     avatarError.value = error instanceof ApiClientError ? error.message : '头像上传失败，请检查网络后重试'
@@ -120,6 +127,11 @@ function schoolDescription(school: { city?: string | null; district?: string | n
 
 onShow(() => {
   if (step.value === 2 && !userStore.schools.length) void loadSchools()
+  if (userStore.profile?.avatarUrl && !avatarPreviewPath.value) {
+    void resolveAvatarSource(userStore.profile.avatarUrl)
+      .then((path) => { avatarPreviewPath.value = path })
+      .catch(() => { avatarPreviewPath.value = '' })
+  }
 })
 </script>
 
@@ -143,7 +155,7 @@ onShow(() => {
       <view class="panel-note">微信会自动填充头像和昵称，也可以跳过</view>
       <!-- #ifdef MP-WEIXIN -->
       <view class="avatar-row">
-        <image v-if="avatarTempPath || userStore.profile?.avatarUrl" class="avatar-preview" :src="avatarTempPath || userStore.profile?.avatarUrl || ''" mode="aspectFill" />
+        <image v-if="avatarPreviewPath || userStore.profile?.avatarUrl" class="avatar-preview" :src="avatarPreviewPath || userStore.profile?.avatarUrl || ''" mode="aspectFill" />
         <view v-else class="avatar-preview placeholder">👩🏻‍🍳</view>
         <view class="avatar-actions">
           <button class="avatar-button" open-type="chooseAvatar" :disabled="avatarUploading" @chooseavatar="onChooseAvatar">{{ avatarUploading ? '上传中…' : '选择微信头像' }}</button>

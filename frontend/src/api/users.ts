@@ -1,4 +1,4 @@
-import { get, put, uploadFile } from './client'
+import { get, post, put, uploadFile } from './client'
 
 export interface SchoolSummary {
   id: string
@@ -54,6 +54,24 @@ export function updateProfile(payload: ProfileUpdate): Promise<UserProfile> {
   return put<UserProfile>('/me/profile', payload)
 }
 
-export function uploadAvatar(filePath: string): Promise<{ avatarUrl: string }> {
+// #ifdef MP-WEIXIN
+function readFileAsBase64(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    uni.getFileSystemManager().readFile({
+      filePath,
+      encoding: 'base64',
+      success: (result) => resolve(String(result.data)),
+      fail: (failure) => reject(new Error(failure.errMsg || '读取图片失败')),
+    })
+  })
+}
+// #endif
+
+export async function uploadAvatar(filePath: string): Promise<{ avatarUrl: string }> {
+  // 微信端使用 JSON base64 上传，只依赖 request 合法域名，不依赖 uploadFile 域名。
+  // #ifdef MP-WEIXIN
+  const dataBase64 = await readFileAsBase64(filePath)
+  return post<{ avatarUrl: string }>('/me/avatar/data', { dataBase64, contentType: 'image/jpeg' })
+  // #endif
   return uploadFile<{ avatarUrl: string }>('/me/avatar', filePath)
 }

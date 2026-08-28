@@ -7,6 +7,7 @@ import { useUserStore } from '../../stores/useUserStore'
 import { getNotificationSettings, saveWechatConsent, updateNotificationSettings, type NotificationSettings } from '../../api/messages'
 import { ApiClientError } from '../../api/types'
 import { updateProfile, uploadAvatar, type ProfileUpdate } from '../../api/users'
+import { resolveAvatarSource } from '../../utils/authedImage'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
@@ -23,6 +24,7 @@ const gender=ref<string>('')
 const birthday=ref('')
 const genderIndex=ref(0)
 const avatarTempPath=ref('')
+const avatarPreviewPath=ref('')
 const avatarUploading=ref(false)
 const savingProfile=ref(false)
 function todayIso():string{const d=new Date();const mm=String(d.getMonth()+1).padStart(2,'0');const dd=String(d.getDate()).padStart(2,'0');return `${d.getFullYear()}-${mm}-${dd}`}
@@ -59,6 +61,11 @@ function loadProfileForm(){
   birthday.value=profile?.birthday??''
   genderIndex.value=Math.max(0,GENDER_OPTIONS.findIndex(item=>item.value===gender.value))
   avatarTempPath.value=''
+  if(profile?.avatarUrl){
+    void resolveAvatarSource(profile.avatarUrl).then((path)=>{avatarPreviewPath.value=path}).catch(()=>{avatarPreviewPath.value=''})
+  }else{
+    avatarPreviewPath.value=''
+  }
 }
 async function uploadChosenAvatar(path:string){
   avatarUploading.value=true
@@ -66,6 +73,11 @@ async function uploadChosenAvatar(path:string){
     await uploadAvatar(path)
     await userStore.refreshProfile()
     avatarTempPath.value=''
+    try{
+      avatarPreviewPath.value=await resolveAvatarSource(userStore.profile?.avatarUrl)
+    }catch{
+      avatarPreviewPath.value=''
+    }
     uni.showToast({title:'头像已更新',icon:'success'})
   }catch(error){
     uni.showToast({title:error instanceof ApiClientError?error.message:'头像上传失败，请检查网络',icon:'none'})
@@ -127,7 +139,7 @@ onShow(()=>{void loadNotificationSettings();void userStore.initialize().then(loa
       <view class="profile-sheet">
         <!-- #ifdef MP-WEIXIN -->
         <view class="profile-avatar-row">
-          <image v-if="avatarTempPath||userStore.profile?.avatarUrl" class="profile-avatar" :src="avatarTempPath||userStore.profile?.avatarUrl||''" mode="aspectFill" />
+          <image v-if="avatarPreviewPath||userStore.profile?.avatarUrl" class="profile-avatar" :src="avatarPreviewPath||userStore.profile?.avatarUrl||''" mode="aspectFill" />
           <view v-else class="profile-avatar avatar-placeholder">👩🏻‍🍳</view>
           <view class="avatar-actions">
             <button class="avatar-button" open-type="chooseAvatar" :disabled="avatarUploading" @chooseavatar="onChooseAvatar">{{ avatarUploading ? '上传中…' : '选择微信头像' }}</button>

@@ -6,13 +6,13 @@ from app.repositories.users import user_stats
 
 
 async def profile(session: AsyncSession, storage: MinioStorage, user) -> dict:
-    # 头像为公开桶中不可猜测的 UUID 对象，可直接返回公开 URL；
+    # 头像通过带鉴权的 /api/v1/me/avatar/file 返回，小程序端用 request 域名即可加载；
     # 评价等他人可见列表仍使用占位，不暴露头像地址。
     avatar_url = None
     if user.avatar_media_id is not None:
         avatar = await session.get(MediaObject, user.avatar_media_id)
         if avatar is not None:
-            avatar_url = storage.public_object_url(avatar.object_key)
+            avatar_url = "/api/v1/me/avatar/file"
     return {
         "id": str(user.id),
         "nickname": user.nickname,

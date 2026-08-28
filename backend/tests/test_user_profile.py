@@ -82,7 +82,7 @@ async def test_profile_service_returns_avatar_and_new_fields(monkeypatch) -> Non
 
     monkeypatch.setattr(user_service, "user_stats", fake_stats)
     data = await user_service.profile(UserSession(), UserStorage(), _user())
-    assert data["avatar_url"] == "https://cdn.test/uploads/avatars/abc.jpg"
+    assert data["avatar_url"] == "/api/v1/me/avatar/file"
     assert data["gender"] == "male"
     assert data["birthday"] == "2003-03-03"
     assert data["stats"]["favorite_count"] == 1
