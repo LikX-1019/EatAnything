@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/LikX-1019/EatAnything/actions/workflows/ci.yml/badge.svg)](https://github.com/LikX-1019/EatAnything/actions/workflows/ci.yml)
 
+[线上管理后台](https://eat.unilinkcore.cn/admin/) · [API 健康状态](https://eat.unilinkcore.cn/health/ready)
+
 面向校园餐饮场景的全栈决策与运营平台。项目以“今天吃什么”为入口，串联选店、收藏、图片打卡、评价、消息通知和个人记录，并为平台与学校提供独立的 Web 管理后台。
 
 这不是只有一个随机按钮的前端原型：用户、学校、店铺、媒体和互动数据均由后端持久化，权限、内容治理、异步任务、备份恢复和生产部署也形成了完整闭环。
@@ -14,6 +16,14 @@
 - **内容与媒体安全**：用户上传内容进入 MinIO 私有 bucket，经鉴权接口读取；店铺公开图片与用户私有媒体分桶管理；评论和照片支持可恢复的软隐藏。
 - **面向生产的工程化**：包含 Alembic 增量迁移、Docker Compose 编排、Caddy HTTPS、健康检查、配置预检、备份恢复、冒烟测试和 GitHub Actions 质量门禁。
 - **异步与缓存设计**：通知 Worker 负责微信订阅消息的幂等投递、重试与失败记录；天气 Worker 按学校维护缓存；随机店铺候选池按学校隔离并支持主动失效。
+
+## 界面预览
+
+| 用户端首页 | 管理后台数据总览 |
+| --- | --- |
+| ![用户端随机选店首页](docs/images/user-home.png) | ![管理后台数据总览](docs/images/admin-dashboard.png) |
+
+> 线上管理后台仅开放登录页面，不在公开仓库中提供管理员账号或密码。用户端同时支持微信小程序与 H5，截图使用演示数据。
 
 ## 核心业务流程
 
