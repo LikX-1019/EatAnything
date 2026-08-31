@@ -19,11 +19,15 @@ const checkingStoreId = ref<string | null>(null)
 const resolvedCheckInImages = ref<Record<string, string>>({})
 const loading = ref(true)
 const errorMessage = ref('')
-const list = computed(() => mode.value === 'eaten'
-  ? appStore.activeSchoolEatenStores
-  : mode.value === 'todo'
-    ? appStore.activeSchoolStores.filter((store) => !store.isEaten)
-    : appStore.activeSchoolStores)
+const eatenCount = computed(() => appStore.activeAreaStores.filter((store) => store.isEaten).length)
+const list = computed(() => {
+  const areaStores = appStore.activeAreaStores
+  return mode.value === 'eaten'
+    ? areaStores.filter((store) => store.isEaten)
+    : mode.value === 'todo'
+      ? areaStores.filter((store) => !store.isEaten)
+      : areaStores
+})
 
 function chooseCheckInImage(): Promise<string | null> {
   return new Promise((resolve, reject) => {
@@ -47,12 +51,23 @@ async function toggle(store: StoreItem) {
     if (!filePath) return
     checkingStoreId.value = store.id
     await appStore.createCheckIn(store.id, filePath)
-    uni.showToast({ title: '打卡成功', icon: 'success' })
+    promptReviewAfterCheckIn(store)
   } catch (error) {
     uni.showToast({ title: error instanceof ApiClientError ? error.message : '打卡失败，请重试', icon: 'none' })
   } finally {
     checkingStoreId.value = null
   }
+}
+function promptReviewAfterCheckIn(store: StoreItem) {
+  uni.showModal({
+    title: '打卡成功',
+    content: `已打卡「${store.name}」，是否立即评价这家店？`,
+    confirmText: '去评价',
+    cancelText: '稍后再说',
+    success: ({ confirm }) => {
+      if (confirm) uni.navigateTo({ url: `/pages/reviews/create?storeId=${encodeURIComponent(store.id)}` })
+    },
+  })
 }
 function formatCheckInTime(value: string): string {
   const date = new Date(value)
@@ -108,12 +123,13 @@ function openStoreCheckIn(store: StoreItem) {
   const checkIn = appStore.latestCheckInForStore(store.id)
   if (!checkIn) return toggle(store)
   uni.showActionSheet({
-    itemList: ['查看打卡记录', '查看大图', '修改图片', '添加打卡记录'],
+    itemList: ['查看打卡记录', '查看大图', '修改图片', '添加打卡记录', '评价该店铺'],
     success: ({ tapIndex }) => {
       if (tapIndex === 0) openCheckInHistory(store)
       else if (tapIndex === 1) previewStoreCheckIn(store)
       else if (tapIndex === 2) void replaceStoreCheckIn(store)
       else if (tapIndex === 3) void addStoreCheckIn(store)
+      else if (tapIndex === 4) uni.navigateTo({ url: `/pages/reviews/create?storeId=${encodeURIComponent(store.id)}` })
     },
   })
 }
@@ -142,8 +158,8 @@ onPullDownRefresh(() => { void loadEaten(true) })
       <view class="segmented">
         <view v-for="item in [{ id: 'all', label: '全部' }, { id: 'eaten', label: '吃过' }, { id: 'todo', label: '待探索' }]" :key="item.id" class="segment" :class="{ active: mode === item.id }" @tap="mode = item.id as typeof mode">{{ item.label }}</view>
       </view>
-      <view class="progress-copy"><text>{{ appStore.activeArea?.name }} 已完成探索</text><text>{{ appStore.activeSchoolEatenStores.length }} / {{ appStore.activeSchoolStores.length }}</text></view>
-      <view class="progress-line"><view :style="{ width: `${appStore.activeSchoolStores.length ? (appStore.activeSchoolEatenStores.length / appStore.activeSchoolStores.length) * 100 : 0}%` }" /></view>
+      <view class="progress-copy"><text>{{ appStore.activeArea?.name }} 已完成探索</text><text>{{ eatenCount }} / {{ appStore.activeAreaStores.length }}</text></view>
+      <view class="progress-line"><view :style="{ width: `${appStore.activeAreaStores.length ? (eatenCount / appStore.activeAreaStores.length) * 100 : 0}%` }" /></view>
       <view v-if="loading" class="page-state">正在加载吃过记录…</view><view v-else-if="errorMessage" class="page-state"><text>{{ errorMessage }}</text><button class="retry-button" @tap="loadEaten()">重新加载</button></view><view v-else-if="list.length" class="store-grid">
         <view v-for="store in list" :key="store.id" class="grid-card" :class="{ 'not-eaten': !store.isEaten }" @tap="openStoreCheckIn(store)">
           <view class="image-wrap"><FallbackImage class="grid-image" :src="appStore.latestCheckInForStore(store.id)?.photoUrl || storeImageUrl(store)" @tap.stop="openStoreCheckIn(store)" @resolved="setResolvedCheckInImage(store.id, $event)" /><text v-if="store.isEaten" class="check-mark">✓</text></view>

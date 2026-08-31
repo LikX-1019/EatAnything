@@ -39,6 +39,11 @@ function previewRecord(record: CheckInItem) {
   uni.previewImage({ current: source, urls: [source] })
 }
 
+function writeReview() {
+  if (!store.value) return
+  uni.navigateTo({ url: `/pages/reviews/create?storeId=${encodeURIComponent(storeId.value)}` })
+}
+
 async function load(refresh = false) {
   loading.value = !refresh
   errorMessage.value = ''
@@ -65,6 +70,7 @@ onPullDownRefresh(() => { void load(true) })
       <view v-if="store" class="store-banner">
         <FallbackImage class="store-banner-image" :src="storeImageUrl(store)" />
         <view class="store-banner-copy"><text class="store-banner-name">{{ store.name }}</text><text class="store-banner-area">{{ store.area || '未分区' }} · 共 {{ records.length }} 次打卡</text></view>
+        <button class="banner-review-button" @tap="writeReview">写评价</button>
       </view>
       <view v-if="loading" class="page-state">正在加载打卡记录…</view>
       <view v-else-if="errorMessage" class="page-state"><text>{{ errorMessage }}</text><button class="retry-button" @tap="load">重新加载</button></view>
@@ -87,6 +93,8 @@ onPullDownRefresh(() => { void load(true) })
 .store-banner { display: flex; align-items: center; gap: 18rpx; padding: 16rpx; border: 1rpx solid #ddc5a3; border-radius: 12rpx 8rpx 14rpx 9rpx; background: #fffaf0; box-shadow: var(--paper-shadow); transform: rotate(-.3deg); }
 .store-banner-image { flex: 0 0 auto; width: 112rpx; height: 92rpx; border: 5rpx solid #fff; background: #f2e8d5; box-shadow: 0 3rpx 8rpx rgba(90,65,40,.15); }
 .store-banner-copy { min-width: 0; }.store-banner-name { display: block; overflow: hidden; color: var(--ink); font-size: 31rpx; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }.store-banner-area { display: block; margin-top: 8rpx; color: var(--muted); font-size: 23rpx; }
+.banner-review-button { flex: 0 0 auto; height: 58rpx; margin-left: auto; padding: 0 20rpx; border: 0; border-radius: 8rpx; background: var(--brand); color: #fff; font-size: 24rpx; line-height: 58rpx; }
+.banner-review-button::after { border: 0; }
 .page-state { padding: 90rpx 20rpx; color: var(--muted); font-size: 27rpx; text-align: center; }.retry-button { display: block; margin: 22rpx auto 0; padding: 0 26rpx; height: 68rpx; border-radius: 10rpx; background: var(--brand); color: #fff; font-size: 25rpx; }
 .record-list { display: flex; flex-direction: column; gap: 22rpx; margin-top: 24rpx; }.record-card { padding: 12rpx 12rpx 16rpx; border: 1rpx solid #ddc6a5; border-radius: 8rpx 14rpx 10rpx 16rpx; background: #fffaf0; box-shadow: var(--paper-shadow); transform: rotate(-.25deg); }.record-card:nth-child(even) { background: #f0f5e5; transform: rotate(.3deg); }.record-image { width: 100%; height: 390rpx; background: #f2e8d5; }.record-footer { display: flex; flex-direction: column; padding: 14rpx 8rpx 0; }.record-time { color: var(--ink); font-size: 27rpx; font-weight: 800; }.record-note { margin-top: 8rpx; color: #5f6c63; font-size: 24rpx; line-height: 1.5; }.record-action { margin-top: 8rpx; color: var(--muted); font-size: 21rpx; }
 </style>

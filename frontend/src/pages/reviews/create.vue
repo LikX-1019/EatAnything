@@ -7,6 +7,7 @@ import { useAppStore } from '../../stores/useAppStore'
 import { useUserStore } from '../../stores/useUserStore'
 import PageHeader from '../../components/PageHeader.vue'
 import FallbackImage from '../../components/FallbackImage.vue'
+import EmptyState from '../../components/EmptyState.vue'
 import { storeImageUrl } from '../../utils/store'
 
 const appStore = useAppStore()
@@ -18,7 +19,7 @@ const submitting = ref(false)
 const loading = ref(true)
 const loadError = ref('')
 const selectedStore = computed(() => appStore.findStore(storeId.value))
-const selectableStores = computed(() => appStore.activeSchoolStores)
+const selectableStores = computed(() => appStore.activeSchoolStores.filter((store) => store.isEaten))
 
 onLoad((query) => {
   if (typeof query?.storeId === 'string') storeId.value = query.storeId
@@ -29,7 +30,9 @@ async function loadExistingReview() {
   loadError.value = ''
   try {
     await appStore.initialize()
-    if (!storeId.value) storeId.value = appStore.activeAreaStores[0]?.id || appStore.activeSchoolStores[0]?.id || ''
+    if (!storeId.value || !selectableStores.value.some((store) => store.id === storeId.value)) {
+      storeId.value = selectableStores.value[0]?.id || ''
+    }
     const existing = (await getAllMyReviews()).items.find((review) => review.store.id === storeId.value)
     if (existing) {
       rating.value = existing.rating
@@ -67,7 +70,7 @@ onShow(() => { void loadExistingReview() })
 </script>
 
 <template>
-  <view class="page-shell create-page" :class="appStore.fontClass"><PageHeader title="评价店铺" back /><view v-if="loading" class="page-state">正在加载评价页面…</view><view v-else-if="loadError" class="page-state"><text>{{ loadError }}</text><button class="retry-button" @tap="loadExistingReview">重新加载</button></view><view v-else class="page-pad"><text class="label">评价哪家店？</text><scroll-view scroll-x class="store-picker" :show-scrollbar="false"><view v-for="store in selectableStores" :key="store.id" class="store-chip" :class="{ active: store.id === storeId }" @tap="storeId = store.id"><FallbackImage :src="storeImageUrl(store)" /><text>{{ store.name }}</text></view></scroll-view><text class="label rating-label">打个分</text><view class="rating-row"><text v-for="item in 5" :key="item" class="star" :class="{ active: item <= rating }" @tap="rating = item">★</text><text class="rating-copy">{{ rating }} 分</text></view><text class="label">说说感受</text><textarea v-model="content" class="review-input" maxlength="500" placeholder="味道、价格、位置都可以写下来" placeholder-class="review-placeholder" /><text class="counter">{{ content.length }}/500</text><button class="submit-button" :disabled="submitting" @tap="submit">{{ submitting ? '提交中…' : '提交评价' }}</button><text v-if="selectedStore" class="selected-store">当前：{{ selectedStore.name }} · {{ selectedStore.area || '未分区' }}</text></view></view>
+  <view class="page-shell create-page" :class="appStore.fontClass"><PageHeader title="评价店铺" back /><view v-if="loading" class="page-state">正在加载评价页面…</view><view v-else-if="loadError" class="page-state"><text>{{ loadError }}</text><button class="retry-button" @tap="loadExistingReview">重新加载</button></view><view v-else class="page-pad"><template v-if="selectableStores.length"><text class="label">评价哪家店？</text><scroll-view scroll-x class="store-picker" :show-scrollbar="false"><view v-for="store in selectableStores" :key="store.id" class="store-chip" :class="{ active: store.id === storeId }" @tap="storeId = store.id"><FallbackImage :src="storeImageUrl(store)" /><text>{{ store.name }}</text></view></scroll-view><text class="label rating-label">打个分</text><view class="rating-row"><text v-for="item in 5" :key="item" class="star" :class="{ active: item <= rating }" @tap="rating = item">★</text><text class="rating-copy">{{ rating }} 分</text></view><text class="label">说说感受</text><textarea v-model="content" class="review-input" maxlength="500" placeholder="味道、价格、位置都可以写下来" placeholder-class="review-placeholder" /><text class="counter">{{ content.length }}/500</text><button class="submit-button" :disabled="submitting" @tap="submit">{{ submitting ? '提交中…' : '提交评价' }}</button><text v-if="selectedStore" class="selected-store">当前：{{ selectedStore.name }} · {{ selectedStore.area || '未分区' }}</text></template><EmptyState v-else title="还没有可评价的店铺" description="完成一次带图片打卡后，就可以为这家店写评价了" /></view></view>
 </template>
 
 <style scoped>
